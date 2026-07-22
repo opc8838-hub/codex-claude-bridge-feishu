@@ -1,4 +1,4 @@
-# CLAUDE.md — codex-bridge-feishu
+# CLAUDE.md — codex-claude-bridge-feishu
 
 ## What this project does
 

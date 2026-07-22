@@ -1,4 +1,4 @@
-# codex-bridge-feishu
+# codex-claude-bridge-feishu
 
 > 📱💻 AI coding agent bridge for Feishu/Lark — supports **OpenAI Codex** & **Claude Code**. Code, debug, and refactor from your phone.
 
@@ -92,8 +92,8 @@ Same bridge codebase, same commands, same streaming cards. Swap agents by runnin
 ### Install
 
 ```bash
-git clone https://github.com/opc8838-hub/codex-bridge-feishu.git
-cd codex-bridge-feishu
+git clone https://github.com/opc8838-hub/codex-claude-bridge-feishu.git
+cd codex-claude-bridge-feishu
 npm install
 npm run build
 ```
