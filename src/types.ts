@@ -59,6 +59,8 @@ export interface ChannelBinding {
   model: string;
   /** Chat mode */
   mode: 'code' | 'plan' | 'ask';
+  /** Whether to require @mention in groups (overrides global config) */
+  requireMention: boolean;
   /** Whether this binding is currently active */
   active: boolean;
   createdAt: string;
@@ -207,6 +209,7 @@ export interface UpsertChannelBindingInput {
   workingDirectory: string;
   model: string;
   mode?: string;
+  requireMention?: boolean;
 }
 
 // ── Conversation Result ──────────────────────────────────────

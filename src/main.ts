@@ -80,7 +80,7 @@ async function main(): Promise<void> {
   const store = new JsonFileStore(config);
   const pendingPerms = new PendingPermissions();
   const provider = new CodexProvider(cliPath, config.autoApprove);
-  const feishu = new FeishuClient(config);
+  const feishu = new FeishuClient(config, store);
 
   const ctx: AppContext = {
     config,

@@ -161,36 +161,58 @@ export function preflightCheck(cliPath: string): {
 export function resolveCodexCliPath(): string | undefined {
   const fromEnv =
     process.env.CTI_CODEX_EXECUTABLE || process.env.CODEX_EXECUTABLE;
-  if (fromEnv && isExecutable(fromEnv)) return fromEnv;
+  if (
+    fromEnv &&
+    (process.platform !== 'win32' || path.extname(fromEnv).toLowerCase() === '.exe') &&
+    isExecutable(fromEnv)
+  ) {
+    return fromEnv;
+  }
 
   const pathCandidates = findAllInPath('codex');
+  if (process.platform === 'win32') {
+    const target = process.arch === 'arm64'
+      ? 'aarch64-pc-windows-msvc'
+      : process.arch === 'x64'
+        ? 'x86_64-pc-windows-msvc'
+        : '';
+    const platformPackage = process.arch === 'arm64'
+      ? 'codex-win32-arm64'
+      : process.arch === 'x64'
+        ? 'codex-win32-x64'
+        : '';
+    const globalCodexExe = target && platformPackage
+      ? path.join(
+          process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'),
+          'npm', 'node_modules', '@openai', 'codex', 'node_modules', '@openai',
+          platformPackage, 'vendor', target, 'bin', 'codex.exe',
+        )
+      : '';
+    const executableCandidates = [
+      globalCodexExe,
+      ...pathCandidates.filter((p) => path.extname(p).toLowerCase() === '.exe'),
+      resolveWin32CodexExe(),
+    ];
+
+    const seen = new Set<string>();
+    for (const p of executableCandidates) {
+      if (p && !seen.has(p)) {
+        seen.add(p);
+        if (isExecutable(p)) return p;
+      }
+    }
+    return undefined;
+  }
+
   const wellKnown = [
     path.join(os.homedir(), '.local', 'bin', 'codex'),
     path.join(os.homedir(), 'bin', 'codex'),
     '/usr/local/bin/codex',
     '/opt/homebrew/bin/codex',
   ];
-  if (process.platform === 'win32') {
-    wellKnown.push(
-      path.join(
-        process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'),
-        'npm',
-        'codex',
-      ),
-    );
-  }
 
   const seen = new Set<string>();
-  // On Windows, prefer .cmd wrappers (spawn-compatible) over shell scripts
   const allCandidates = [...pathCandidates, ...wellKnown];
-  if (process.platform === 'win32') {
-    // Sort: .cmd first (Node spawn needs these), then .exe, then others
-    allCandidates.sort((a, b) => {
-      const aExt = a.endsWith('.cmd') ? 0 : a.endsWith('.exe') ? 1 : 2;
-      const bExt = b.endsWith('.cmd') ? 0 : b.endsWith('.exe') ? 1 : 2;
-      return aExt - bExt;
-    });
-  }
   for (const p of allCandidates) {
     if (p && !seen.has(p)) {
       seen.add(p);
@@ -280,11 +302,12 @@ export class CodexProvider {
           try {
             const codexOptions: Record<string, unknown> = {};
 
-            // Always use resolved codex.exe on Windows
-            if (process.platform === 'win32' && resolvedCodexExe) {
-              codexOptions.codexPathOverride = resolvedCodexExe;
-            } else if (codexCliPath) {
+            // Prefer globally installed codex CLI (supports latest models)
+            // Fall back to SDK-bundled binary for compatibility
+            if (codexCliPath) {
               codexOptions.codexPathOverride = codexCliPath;
+            } else if (process.platform === 'win32' && resolvedCodexExe) {
+              codexOptions.codexPathOverride = resolvedCodexExe;
             }
 
             if (process.env.OPENAI_API_KEY) {
@@ -293,12 +316,22 @@ export class CodexProvider {
             if (process.env.OPENAI_BASE_URL) {
               codexOptions.baseUrl = process.env.OPENAI_BASE_URL;
             }
+            if (process.platform === 'win32') {
+              codexOptions.env = {
+                ...process.env,
+                LANG: 'C.UTF-8',
+                LC_ALL: 'C.UTF-8',
+                PYTHONIOENCODING: 'utf-8',
+                PYTHONUTF8: '1',
+              };
+            }
 
             const codex = new Codex(codexOptions);
 
-            // MONKEY-PATCH: directly override executable path on Windows
-            if (process.platform === 'win32' && resolvedCodexExe) {
-              (codex as any).exec.executablePath = resolvedCodexExe;
+            // MONKEY-PATCH: override executable path on Windows
+            // Prefer global CLI; fall back to bundled binary
+            if (process.platform === 'win32') {
+              (codex as any).exec.executablePath = codexCliPath || resolvedCodexExe;
             }
 
             // Determine thread options

@@ -111,7 +111,12 @@ function resolveBinding(ctx: AppContext, chatId: string): ChannelBinding {
   return createNewBinding(ctx, chatId);
 }
 
-function createNewBinding(ctx: AppContext, chatId: string, workDir?: string): ChannelBinding {
+function createNewBinding(
+  ctx: AppContext,
+  chatId: string,
+  workDir?: string,
+  requireMention?: boolean,
+): ChannelBinding {
   const cwd = workDir || ctx.config.defaultWorkDir || os.homedir();
   const model = ctx.config.defaultModel || '';
   const session = ctx.store.createSession(`Bridge: ${chatId}`, model, undefined, cwd);
@@ -120,6 +125,7 @@ function createNewBinding(ctx: AppContext, chatId: string, workDir?: string): Ch
     codepilotSessionId: session.id,
     workingDirectory: cwd,
     model,
+    requireMention,
   });
 }
 
@@ -128,9 +134,14 @@ function createNewBinding(ctx: AppContext, chatId: string, workDir?: string): Ch
 function computeSdkSessionUpdate(
   sdkSessionId: string | null | undefined,
   hasError: boolean,
+  errorMessage: string,
 ): string | null {
-  if (sdkSessionId && !hasError) return sdkSessionId;
-  if (hasError) return '';
+  // A timeout, auth failure, or transient provider error does not invalidate the
+  // underlying thread. Keep it so the next message can resume its context.
+  if (sdkSessionId) return sdkSessionId;
+  if (hasError && /\b(?:session|thread)\b.*\b(?:not found|does not exist|unknown|invalid|expired)\b/i.test(errorMessage)) {
+    return '';
+  }
   return null;
 }
 
@@ -365,7 +376,11 @@ async function handleMessage(ctx: AppContext, msg: InboundMessage): Promise<void
     // Persist SDK session ID
     if (binding.id) {
       try {
-        const update = computeSdkSessionUpdate(result.sdkSessionId, result.hasError);
+        const update = computeSdkSessionUpdate(
+          result.sdkSessionId,
+          result.hasError,
+          result.errorMessage,
+        );
         if (update !== null) {
           ctx.store.updateChannelBinding(binding.id, { sdkSessionId: update });
         }
@@ -412,17 +427,20 @@ async function handleCommand(
         'Send any message to interact with Codex.',
         '',
         '**Commands:**',
-        '/new [path] - Start new session',
+        '/newchat <name> [desc] - Create new group & session',
+        '/new [path] - Start new session in current chat',
         '/bind <session_id> - Bind to existing session',
         '/list - Discover local CLI sessions',
         '/resume <编号或ID> - Resume a CLI session',
         '/cwd /path - Change working directory',
         '/mode plan|code|ask - Change mode',
+        '/mention on|off - Toggle @mention requirement',
         '/status - Show current status',
         '/usage - Show token usage for current session',
         '/usage_all - Show token usage across all sessions',
         '/stop - Stop current session',
         '/memory - View cross-session memory',
+        '/sendfile <path> - Upload a file to this chat',
         '/perm allow|allow_session|deny <id> - Permission response',
         '1/2/3 - Quick permission reply (single pending)',
         '/help - Show this help',
@@ -482,6 +500,33 @@ async function handleCommand(
       break;
     }
 
+    case '/newchat': {
+      if (!args) {
+        response = 'Usage: /newchat <group name> [description]\n\nCreates a new Feishu group with the bot, binds a fresh Codex session to it.';
+        break;
+      }
+      const firstSpace = args.indexOf(' ');
+      const groupName = firstSpace > 0 ? args.slice(0, firstSpace).trim() : args;
+      const safeName = groupName.slice(0, 256);
+      const groupDesc = firstSpace > 0 ? args.slice(firstSpace + 1).trim() : '';
+      const result = await ctx.feishu.createGroupChat(safeName, groupDesc, msg.userId);
+      if (!result) {
+        response = 'Failed to create group. Check bot permissions (need `im:chat` and `im:chat:members` scopes).';
+        break;
+      }
+      const binding = createNewBinding(ctx, result.chatId, undefined, false);
+      response = [
+        `Group **${result.name}** created.`,
+        '',
+        `You've been added — all messages are visible to Codex (no @mention needed).`,
+        '',
+        `Session: \`${binding.codepilotSessionId.slice(0, 8)}...\``,
+        `CWD: \`${binding.workingDirectory || '~'}\``,
+        `Use /mention on|off to toggle @mention requirement.`,
+      ].join('\n');
+      break;
+    }
+
     case '/bind': {
       if (!args) {
         response = 'Usage: /bind <session_id>';
@@ -535,6 +580,21 @@ async function handleCommand(
       const binding = resolveBinding(ctx, msg.chatId);
       ctx.store.updateChannelBinding(binding.id, { mode: args as 'code' | 'plan' | 'ask' });
       response = `Mode set to **${args}**`;
+      break;
+    }
+
+    case '/mention': {
+      const valid = args === 'on' || args === 'off';
+      if (!valid) {
+        response = 'Usage: /mention on|off\n\nWhen off, all messages in group are sent to Codex (no @mention needed).';
+        break;
+      }
+      const binding = resolveBinding(ctx, msg.chatId);
+      const newVal = args === 'on';
+      ctx.store.updateChannelBinding(binding.id, { requireMention: newVal });
+      response = newVal
+        ? '@mention required — only @bot messages go to Codex.'
+        : '@mention disabled — all messages go to Codex. Use /mention on to re-enable.';
       break;
     }
 
@@ -711,6 +771,40 @@ async function handleCommand(
       }
 
       response = resumeCliSession(ctx, msg.chatId, target);
+      break;
+    }
+
+    case '/sendfile': {
+      const filePath = args.trim();
+      if (!filePath) {
+        response = [
+          '**Send File**',
+          '',
+          'Usage: `/sendfile <file path>`',
+          '',
+          'Uploads a local file and sends it to this chat.',
+          'Supports images (PNG/JPEG/GIF/WebP) and files (MP4/PDF/DOC/PPT/etc.).',
+          '',
+          'Example:',
+          '`/sendfile C:\\Users\\me\\video.mp4`',
+        ].join('\n');
+        break;
+      }
+
+      // Expand ~ to home directory
+      const resolvedPath = filePath.startsWith('~')
+        ? path.join(os.homedir(), filePath.slice(1))
+        : filePath;
+
+      if (!fs.existsSync(resolvedPath)) {
+        response = `File not found: ${resolvedPath}`;
+        break;
+      }
+
+      const sr = await ctx.feishu.sendFileAsMessage(msg.chatId, resolvedPath);
+      response = sr.ok
+        ? `File sent: ${path.basename(resolvedPath)}`
+        : `Upload failed: ${sr.error || 'unknown error'}`;
       break;
     }
 

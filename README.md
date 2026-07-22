@@ -1,49 +1,68 @@
 # codex-bridge-feishu
 
-[**中文文档**](./README.zh.md) | English
+> 📱💻 AI coding agent bridge for Feishu/Lark — supports **OpenAI Codex** & **Claude Code**. Code, debug, and refactor from your phone.
 
-> 📱💻 Chat with [OpenAI Codex CLI](https://github.com/openai/codex) from Feishu/Lark — code, debug, and refactor from your phone.
+A lightweight Node.js daemon that bridges Feishu/Lark to your local AI coding agent. Send a message in Feishu, the agent executes in your project directory, and responses stream back as real-time cards with live progress, tool calls, and token usage.
 
-**codex-bridge-feishu** is a lightweight Node.js daemon that bridges Feishu/Lark messaging to your local Codex CLI. Send a message in Feishu, and Codex executes in your project directory. Responses are streamed back as real-time cards with live progress, tool execution status, and token usage.
+**Now supports Claude Code** (`@anthropic-ai/claude-code`) with the same feature set — just swap `codex-provider.ts` for `claude-provider.ts`.
 
 ---
 
-## ✨ Why codex-bridge-feishu?
+## ✨ Highlights
 
-| Advantage | Detail |
-|-----------|--------|
-| **Code from anywhere** | Phone, tablet, or any device with Feishu — no terminal needed |
-| **Real-time streaming** | See Codex thinking and executing live, just like in terminal |
-| **Session continuity** | Multi-turn conversations with `/resume` — pick up where you left off |
-| **Group collaboration** | Invite the bot to a group chat, your whole team can interact with Codex |
-| **Zero public IP** | Feishu WebSocket persistent connection — no port forwarding, no cloud server |
-| **Lightweight** | Single Node.js process, ~300MB memory with Codex child process |
-| **Dual auth** | Use your ChatGPT/Codex subscription, or an OpenAI API key |
-| **Clean abstraction** | Provider pattern — swap Codex for any other AI agent by writing one file |
+### 🆕 `/newchat` — One Topic, One Group, One Session
+
+No more messy terminal tabs. In Feishu:
+
+```
+/newchat 修复登录Bug
+```
+
+The bot **creates a new group**, adds you, and binds a fresh agent session — one topic per group. Tag all your AI groups for one-click filtering. Your Feishu becomes your terminal.
+
+### 🆕 `/mention on|off` — Per-Group @ Control
+
+Each group can independently toggle the @mention requirement:
+
+```
+/mention off   # All messages visible to the agent — full context awareness
+/mention on    # Only @bot messages trigger responses
+```
+
+Groups created via `/newchat` default to `off` — the agent sees everything.
+
+### 🆕 Dual Agent Support — Claude Code + Codex
+
+| Agent | Provider | Notes |
+|-------|----------|-------|
+| **Claude Code** | `claude-provider.ts` | DeepSeek / Anthropic API compatible |
+| **OpenAI Codex** | `codex-provider.ts` | ChatGPT / Codex subscription or API key |
+
+Same bridge codebase, same commands, same streaming cards. Swap agents by running from a different directory with a different `config.env`.
 
 ---
 
 ## 🏗️ How It Works
 
 ```
-┌──────────┐    WebSocket      ┌──────────────────┐    SDK spawn     ┌──────────┐
-│  Feishu  │ ◀══════════════▶  │  Bridge Daemon   │ ──────────────▶ │  Codex   │
-│   Bot    │   persistent      │   (Node.js)      │   subprocess    │   CLI    │
-│          │   connection      │                  │ ◀────────────── │ (local)  │
-│  📱→📤   │                   │  config.env       │   JSON stream   │          │
-│  📥←📲   │   streaming       │  session store    │                 │ git repo │
-│          │   cards + text    │  permissions      │                 │   ~/proj │
-└──────────┘                   └──────────────────┘                 └──────────┘
+┌──────────┐    WebSocket      ┌──────────────────┐    SDK spawn     ┌───────────┐
+│  Feishu  │ ◀══════════════▶  │  Bridge Daemon   │ ──────────────▶ │  AI Agent │
+│   Bot    │   persistent      │   (Node.js)      │   subprocess    │  (local)  │
+│          │   connection      │                  │ ◀────────────── │           │
+│  📱→📤   │                   │  config.env       │   JSON/SSE     │ Claude/   │
+│  📥←📲   │   streaming       │  session store    │   stream        │ Codex     │
+│          │   cards + text    │  per-chat bindings│                 │           │
+└──────────┘                   └──────────────────┘                 └───────────┘
 ```
 
 ### Detailed Flow
 
 1. **Message arrives** — Feishu pushes `im.message.receive_v1` event through persistent WebSocket
-2. **Bridge routes** — `bridge.ts` checks for slash commands, then delegates to conversation engine
-3. **Codex starts** — `codex-provider.ts` uses `@openai/codex-sdk` to start a Codex thread in the working directory
-4. **Events stream** — Codex emits `ThreadEvent` JSON (text deltas, tool calls, tool results, usage)
-5. **SSE conversion** — Provider translates Codex events into unified SSE format (`text`, `tool_use`, `tool_result`, `result`)
-6. **Card rendering** — `conversation.ts` aggregates SSE events, builds streaming Feishu CardKit cards
+2. **Bridge routes** — `bridge.ts` resolves the per-chat binding (chatId → sessionId), checks slash commands, then delegates to the conversation engine
+3. **Agent starts** — Provider (`claude-provider.ts` or `codex-provider.ts`) spawns the agent via its SDK in the working directory
+4. **Events stream** — Agent emits text deltas, tool calls, tool results, and usage info
+5. **SSE conversion** — Provider translates agent events into a unified SSE format (`text`, `tool_use`, `tool_result`, `result`)
+6. **Card rendering** — `conversation.ts` aggregates SSE events and builds streaming Feishu CardKit cards
 7. **Real-time updates** — Each card patch is delivered to Feishu via REST API, giving users live progress
 
 ### Tech Stack
@@ -52,9 +71,9 @@
 |-------|-----------|
 | Runtime | Node.js >= 20 |
 | Language | TypeScript (strict) |
-| Codex SDK | `@openai/codex-sdk` v0.130 |
-| Feishu SDK | `@larksuiteoapi/node-sdk` v1.60 |
-| Bundler | esbuild (zero-config, 50ms builds) |
+| Agent SDK | `@anthropic-ai/claude-agent-sdk` or `@openai/codex-sdk` |
+| Feishu SDK | `@larksuiteoapi/node-sdk` |
+| Bundler | esbuild (zero-config) |
 | Persistence | JSON files in `.bridge/data/` |
 | Streaming | Feishu CardKit v2 (streaming cards) |
 
@@ -65,30 +84,17 @@
 ### Prerequisites
 
 - **Node.js >= 20** — `node --version`
-- **Codex CLI** — `npm install -g @openai/codex` then `codex login`
+- **AI Agent CLI** (pick one):
+  - **Claude Code**: install and configure via `claude --version`
+  - **Codex CLI**: `npm install -g @openai/codex` then `codex login`
 - **Feishu self-built app** — see [Feishu Setup](#-feishu-app-setup) below
-
-### Platform Support
-
-| Platform | Status | Daemon |
-|----------|--------|--------|
-| **macOS** | ✅ Full support | `launchd` via `scripts/daemon.sh` |
-| **Linux** | ✅ Full support | `systemd` or `pm2` |
-| **Windows** | ✅ Full support | `pm2` or Task Scheduler |
-
-> 💡 The bridge is pure Node.js with zero native dependencies — it works anywhere Node.js runs. The only platform-specific code is Codex CLI path resolution, which handles Windows (`.exe`/`.cmd`), macOS (`brew`), and Linux (`PATH`) automatically.
 
 ### Install
 
 ```bash
-# Clone
 git clone https://github.com/opc8838-hub/codex-bridge-feishu.git
 cd codex-bridge-feishu
-
-# Install dependencies
 npm install
-
-# Build
 npm run build
 ```
 
@@ -98,109 +104,63 @@ npm run build
 cp config.env.example config.env
 ```
 
-Edit `config.env` with your credentials:
+Edit `config.env`:
 
 ```bash
 # ── Required ──
-CTI_FEISHU_APP_ID=cli_xxxxxxxxxx        # From Feishu Open Platform
-CTI_FEISHU_APP_SECRET=xxxxxxxxxxxxxx    # From Feishu Open Platform
-CTI_DEFAULT_WORKDIR=/home/me/projects   # Where Codex runs
+CTI_FEISHU_APP_ID=cli_xxxxxxxxxx
+CTI_FEISHU_APP_SECRET=xxxxxxxxxxxxxx
+CTI_DEFAULT_WORKDIR=/home/me/projects
 
 # ── Optional ──
 CTI_DEFAULT_MODE=code                   # code | plan | ask
-# CTI_DEFAULT_MODEL=                    # Leave empty for ChatGPT Plus auto-select
 CTI_FEISHU_DOMAIN=feishu                # feishu | lark
-CTI_FEISHU_REQUIRE_MENTION=true         # @bot in group chats
-CTI_AUTO_APPROVE=true                   # Recommended for Codex
+CTI_FEISHU_REQUIRE_MENTION=true         # Default for non-/newchat groups
+CTI_AUTO_APPROVE=true
 
-# ── OpenAI API (choose one) ──
-# Option A: ChatGPT/Codex subscription (no config needed, just run `codex login`)
-# Option B: API key
-# OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxx
-# OPENAI_BASE_URL=https://api.openai.com/v1
+# ── AI Agent (choose one) ──
+# Claude Code:
+ANTHROPIC_AUTH_TOKEN=sk-xxx
+ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
+
+# OR Codex:
+# OPENAI_API_KEY=sk-xxx
 ```
-
-### Authentication
-
-| Method | Setup | Best For |
-|--------|-------|----------|
-| **ChatGPT / Codex subscription** | `codex login` in terminal | Individual developers with subscription |
-| **OpenAI API key** | Set `OPENAI_API_KEY` in `config.env` | Pay-as-you-go, team shared keys |
-| **Third-party API** | Set `OPENAI_API_KEY` + `OPENAI_BASE_URL` | Custom endpoints |
-
-> ⚠️ **ChatGPT Plus users**: Leave `CTI_DEFAULT_MODEL` empty (commented out). Codex will auto-detect a compatible model. Forcing a specific model like `gpt-5` will cause a "not supported" error.
 
 ### Start
 
 ```bash
-# Foreground (testing — all platforms)
+# Foreground (testing)
 npm start
-```
 
-**macOS (launchd):**
-
-```bash
-bash scripts/daemon.sh start
-bash scripts/daemon.sh status
-bash scripts/daemon.sh logs
-bash scripts/daemon.sh stop
-```
-
-**Linux (systemd):**
-
-```bash
-# Edit WorkingDirectory in scripts/codex-bridge-feishu.service first
-sudo cp scripts/codex-bridge-feishu.service /etc/systemd/system/
-sudo systemctl enable --now codex-bridge-feishu
-sudo journalctl -u codex-bridge-feishu -f
-```
-
-**Windows / Linux / macOS (pm2 — universal):**
-
-```bash
-npm install -g pm2
+# PM2 (recommended for production)
 pm2 start ecosystem.config.cjs
-pm2 status
-pm2 logs codex-bridge-feishu
-pm2 save          # auto-restart on boot
+pm2 save
 ```
 
 ### Verify
 
-```bash
-# macOS
-bash scripts/daemon.sh logs
-
-# systemd
-sudo journalctl -u codex-bridge-feishu -n 20
-
-# pm2
-pm2 logs codex-bridge-feishu --lines 20
-```
-
-You should see:
 ```
 [info]: client ready
 [info]: event-dispatch is ready
 [info]: ws client ready
 ```
 
-Then send any message to the bot in Feishu — it should reply via Codex.
-
 ---
 
 ## 🔧 Feishu App Setup
 
-1. Go to [Feishu Open Platform](https://open.feishu.cn/app) → **Create enterprise self-built app**
+1. [Feishu Open Platform](https://open.feishu.cn/app) → **Create enterprise self-built app**
 2. Enable **Bot** capability
-3. **Events & Callbacks** → select **Use persistent connection** (WebSocket)
+3. **Events & Callbacks** → **Use persistent connection** (WebSocket)
 4. Subscribe to event: `im.message.receive_v1`
 5. Add permissions:
    - `im:message` — Send messages
    - `im:message.receive_v1` — Receive messages
    - `im:message:readonly` — Read messages
    - `im:resource` — Upload/download files
-   - `im:chat:readonly` — Read chat info
+   - `im:chat` / `im:chat:create` / `im:chat:read` / `im:chat:update` — Create & manage groups (for `/newchat`)
+   - `im:chat.members:read` / `im:chat.members:write_only` — Manage group members
    - `im:message.reactions:write_only` — Typing indicator
    - `cardkit:card` — Streaming cards
 6. **Publish** and activate
@@ -209,57 +169,49 @@ Then send any message to the bot in Feishu — it should reply via Codex.
 
 ## 📖 Usage
 
-### Chat Normally
+### `/newchat` — Create Topic Groups
 
-Once the bridge is running, just send a message to the Feishu bot. Codex will:
+```
+/newchat 视频封面生成器
+/newchat 数据库优化 帮我分析慢查询并给出优化建议
+```
 
-1. Read your message as a prompt
-2. Execute in the configured working directory
-3. Stream thinking, tool calls, and final response as a live card
+Creates a new Feishu group with a dedicated agent session. All messages in the group are visible to the agent (no @mention needed). Each group is independent — five groups, five parallel sessions.
 
-### Slash Commands
+### Per-Group @Mention Control
+
+```
+/mention off   # Agent sees all messages (default for /newchat groups)
+/mention on    # Agent only responds when @mentioned
+/status        # Shows current settings including @mention status
+```
+
+### Full Command Reference
 
 | Command | Action |
 |---------|--------|
-| `/new` | Start a fresh session |
-| `/resume <id>` | Continue a previous session |
+| `/newchat <name> [desc]` | **Create new group + session** |
+| `/new [path]` | Start fresh session in current chat |
+| `/mention on\|off` | Toggle @mention requirement per group |
+| `/resume <id>` | Resume a previous session |
 | `/list` | Show recent sessions |
-| `/delete <id>` | Delete a session |
-| `/model <name>` | Switch the model |
-| `/mode code` | Switch to code mode |
-| `/mode plan` | Switch to plan mode |
-| `/mode ask` | Switch to ask mode |
-| `/usage` | Token usage for current session |
-| `/usage_all` | Token usage across all sessions |
-| `/memory` | View cross-session memory |
-| `/help` | Show available commands |
+| `/bind <session_id>` | Bind to existing session |
+| `/cwd /path` | Change working directory |
+| `/mode code\|plan\|ask` | Switch agent mode |
+| `/status` | Show session status, CWD, model, @mention |
+| `/stop` | Stop current running task |
+| `/perm allow\|deny <id>` | Respond to permission request |
+| `/help` | Show all commands |
 
-### Memory Layer
+### Memory Layer (Codex)
 
-The bridge maintains a persistent memory file at `~/.codex-bridge-memory.md`. Before each conversation, the file content is prepended to your prompt as context. Codex reads it and remembers your preferences, project structures, coding conventions, and other settings across sessions.
+The bridge maintains `~/.codex-bridge-memory.md` — persistent cross-session context. The agent reads and updates it automatically.
 
-**How it works:**
+### Group Collaboration
 
-```
-User message → Read ~/.codex-bridge-memory.md → Prepend to prompt → Codex sees:
-  [持久记忆]
-  User's project is at C:\projects, uses TypeScript + Vue3...
-  ---
-  [用户消息]
-  Fix the login bug
-```
-
-**Setting up memory:** Just tell Codex your preferences in Feishu:
-
-> 记住：我的项目在 C:\projects，用 TypeScript，缩进 2 空格，提交用中文 commit message。
-
-Codex will update the memory file. Future sessions automatically include it.
-
-**View/Edit:** Use `/memory` in Feishu, or edit `~/.codex-bridge-memory.md` directly.
-
-### Group Chat
-
-Invite the bot to a group chat. By default, the bot only responds when `@mention`ed. Set `CTI_FEISHU_REQUIRE_MENTION=false` to let it respond to every message.
+- **One group = one topic** — use `/newchat` to spin up dedicated groups
+- **Tag your groups** — add a label (e.g. "Claude") in Feishu for one-click filtering
+- **Multi-agent** — run both Claude and Codex bots simultaneously, each in their own groups
 
 ---
 
@@ -270,51 +222,50 @@ src/
 ├── main.ts              # Entry point, process lifecycle, watchdog
 ├── config.ts            # config.env loader
 ├── types.ts             # Shared TypeScript types & interfaces
+├── claude-provider.ts   # Claude Code SDK → unified SSE stream
 ├── codex-provider.ts    # Codex SDK → unified SSE stream
-├── conversation.ts      # SSE → streaming CardKit cards
+├── conversation.ts      # SSE → streaming CardKit cards (provider-agnostic)
 ├── bridge.ts            # Message router, slash commands, /help
-├── feishu.ts            # Feishu WebSocket + REST API client
+├── feishu.ts            # Feishu WebSocket + REST API (chat create, members)
 ├── feishu-markdown.ts   # Markdown → Feishu CardKit JSON converter
-├── store.ts             # JSON-file session store (.bridge/data/)
+├── store.ts             # JSON-file session & binding store (.bridge/data/)
 ├── permissions.ts       # Pending permission/approval queue
 ├── delivery.ts          # Stream delivery with rate limiting
 ├── validators.ts        # Input validation & sanitization
-├── session-scanner.ts   # Discover existing Codex sessions
+├── session-scanner.ts   # Discover existing CLI sessions on disk
 └── logger.ts            # Structured logging with secret redaction
 ```
 
-### Design Principles
+### Key Design
 
-- **Provider abstraction** — only `codex-provider.ts` knows about Codex. Swap it to support any other AI agent.
-- **Unified SSE format** — all providers emit the same `text | tool_use | tool_result | result | error` events.
-- **Card streaming engine** — `conversation.ts` is provider-agnostic. It just consumes SSE and renders cards.
-- **Clean shutdown** — SIGTERM/SIGINT gracefully close Codex threads and deny pending permissions.
+- **Per-chat session isolation** — `bindings.json` maps `feishu:{chatId}` → `sessionId`. Every DM and group has an independent agent session with isolated conversation history.
+- **Provider abstraction** — swap `claude-provider.ts` ↔ `codex-provider.ts`. Both emit the same unified SSE format.
+- **Card streaming engine** — `conversation.ts` is provider-agnostic, consuming SSE events and rendering streaming CardKit cards.
 
 ---
 
 ## 🚀 Quick Comparison
 
-| Feature | codex-bridge-feishu | codex CLI alone |
-|---------|---------------------|-----------------|
-| Access from phone | ✅ Feishu app | ❌ Terminal only |
-| Group collaboration | ✅ Invite bot to group | ❌ |
-| Multi-turn sessions | ✅ `/resume` | ✅ `codex resume` |
+| Feature | Bridge | CLI Alone |
+|---------|--------|-----------|
+| Access from phone | ✅ Feishu | ❌ Terminal only |
+| `/newchat` — one topic per group | ✅ | ❌ |
+| Group collaboration | ✅ Invite bot | ❌ |
+| Per-group @mention control | ✅ `/mention on\|off` | ❌ |
+| Multi-turn sessions | ✅ `/resume` | ✅ |
 | Streaming response | ✅ Real-time cards | ✅ Terminal |
-| Image attachments | ✅ Paste in Feishu | ✅ `--image` flag |
-| Session management | ✅ `/list`, `/delete` | ❌ Manual file management |
-| Multi-project | ✅ Per-session `workDir` | ❌ One cwd at a time |
-| Cross-session memory | ✅ `MEMORY.md` persistent context | ❌ |
-| File upload | ✅ Auto-upload generated files | ❌ |
-| OTA updates | ✅ Just `git pull` | ❌ `npm update -g` |
+| Session management | ✅ `/list`, `/bind`, `/status` | ❌ |
+| Multi-agent (Claude + Codex) | ✅ Same codebase | ❌ |
+| Cross-session memory | ✅ Persistent context | ❌ |
 
 ---
 
 ## 🔒 Security
 
-- **No cloud proxy** — Codex runs locally on your machine. Messages pass through Feishu's encrypted WebSocket.
-- **Secret redaction** — Logger automatically strips `token`, `secret`, `password`, `api_key` patterns from logs.
-- **Access control** — Optional `CTI_FEISHU_ALLOWED_USERS` whitelist.
-- **Auto-approve** — Recommended for Codex since interactive permission forwarding is not supported. Use `CTI_AUTO_APPROVE=true`.
+- **Local execution** — AI agent runs on your machine. No cloud proxy.
+- **Secret redaction** — Logger strips `token`, `secret`, `password`, `api_key` from logs.
+- **Access control** — `CTI_FEISHU_ALLOWED_USERS` whitelist.
+- **Auto-approve** — `CTI_AUTO_APPROVE=true` recommended for unattended use.
 
 ---
 

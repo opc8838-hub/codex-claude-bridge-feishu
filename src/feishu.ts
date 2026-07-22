@@ -106,8 +106,14 @@ export class FeishuClient {
   private activeCards = new Map<string, CardState>();
   private cardCreatePromises = new Map<string, Promise<boolean>>();
 
-  constructor(config: AppContext['config']) {
+  private store: { getChannelBinding(chatId: string): { requireMention?: boolean } | null } | null = null;
+
+  constructor(
+    config: AppContext['config'],
+    store?: { getChannelBinding(chatId: string): { requireMention?: boolean } | null } | null,
+  ) {
     this.config = config;
+    this.store = store ?? null;
   }
 
   // ── Lifecycle ───────────────────────────────────────────────
@@ -559,6 +565,43 @@ export class FeishuClient {
     return this.finalizeCard(chatId, status, responseText, tokenUsage);
   }
 
+  // ── Create Group Chat ──────────────────────────────────────
+
+  async createGroupChat(
+    name: string,
+    description: string,
+    userId: string,
+  ): Promise<{ chatId: string; name: string } | null> {
+    if (!this.restClient) {
+      console.warn('[feishu] createGroupChat: REST client not initialized');
+      return null;
+    }
+    try {
+      const chatRes = await this.restClient.im.chat.create({
+        data: { name, description: description || undefined, chat_type: 'group' },
+      });
+      const chatId = (chatRes as any)?.data?.chat_id;
+      if (!chatId) {
+        console.warn('[feishu] createGroupChat: no chat_id in response');
+        return null;
+      }
+      console.log(`[feishu] Group created: chatId=${chatId}, name="${name}"`);
+      try {
+        await this.restClient.im.chatMembers.create({
+          path: { chat_id: chatId },
+          data: { id_list: [userId] },
+        });
+        console.log(`[feishu] User ${userId} added to group ${chatId}`);
+      } catch (err) {
+        console.warn('[feishu] Failed to add user to group:', err instanceof Error ? err.message : err);
+      }
+      return { chatId, name };
+    } catch (err) {
+      console.error('[feishu] createGroupChat failed:', err instanceof Error ? err.message : err);
+      return null;
+    }
+  }
+
   // ── Send (3-layer degradation) ─────────────────────────────
 
   async send(
@@ -887,18 +930,7 @@ export class FeishuClient {
       return;
     }
 
-    // Group chat: require @mention by default
-    if (isGroup) {
-      if (this.config.feishuRequireMention && !this.isBotMentioned(msg.mentions)) {
-        console.log('[feishu] Group message ignored (bot not @mentioned), chatId:', chatId);
-        return;
-      }
-    }
-
-    // Track last message ID for typing indicator
-    this.lastIncomingMessageId.set(chatId, msg.message_id);
-
-    // Extract content based on message type
+    // Extract content first (needed for slash-command check)
     let text = '';
     const attachments: FileAttachment[] = [];
     const messageType = msg.message_type;
@@ -940,10 +972,34 @@ export class FeishuClient {
       return;
     }
 
+    // Track last message ID for typing indicator
+    this.lastIncomingMessageId.set(chatId, msg.message_id);
+
+    // Group chat: require @mention unless slash-command or per-binding override
+    if (isGroup) {
+      const isSlashCommand = text.trim().startsWith('/');
+      if (!isSlashCommand) {
+        const binding = this.store?.getChannelBinding(chatId);
+        const requireMention = binding?.requireMention ?? this.config.feishuRequireMention;
+        if (requireMention && !this.isBotMentioned(msg.mentions)) {
+          console.log('[feishu] Group message ignored (bot not @mentioned), chatId:', chatId);
+          return;
+        }
+      }
+    }
+
     // Strip @mention markers
     text = this.stripMentionMarkers(text);
 
-    if (!text.trim() && attachments.length === 0) return;
+    // If only @mention without text, use a default prompt
+    if (!text.trim() && attachments.length === 0) {
+      const mentioned = isGroup && this.isBotMentioned(msg.mentions);
+      if (mentioned) {
+        text = 'Hi';
+      } else {
+        return;
+      }
+    }
 
     const timestamp = parseInt(msg.create_time, 10) || Date.now();
 

@@ -198,6 +198,7 @@ export class JsonFileStore {
       workingDirectory: data.workingDirectory,
       model: data.model,
       mode: (this.config.defaultMode as 'code' | 'plan' | 'ask') || 'code',
+      requireMention: data.requireMention ?? true,
       active: true,
       createdAt: now(),
       updatedAt: now(),

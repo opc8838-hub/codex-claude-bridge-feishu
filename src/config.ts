@@ -1,7 +1,7 @@
 /**
  * Configuration loader.
  *
- * Reads ./config.env from the project root directory.
+ * Reads ./config.env from the project root directory by default.
  * Runtime data (sessions, logs, PID files) lives in .bridge/ under the project root.
  */
 
@@ -28,7 +28,7 @@ const PROJECT_DIR = process.cwd();
 
 /** All data lives under the project directory by default. Override with CTI_HOME env var. */
 export const CTI_HOME = process.env.CTI_HOME || path.join(PROJECT_DIR, '.bridge');
-export const CONFIG_PATH = path.join(PROJECT_DIR, 'config.env');
+export const CONFIG_PATH = process.env.CTI_CONFIG_PATH || path.join(PROJECT_DIR, 'config.env');
 
 function parseEnvFile(content: string): Map<string, string> {
   const entries = new Map<string, string>();

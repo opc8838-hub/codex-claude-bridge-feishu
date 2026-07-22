@@ -3,6 +3,7 @@ dist/
 *.tgz
 .env
 config.env
+config.*.env
 .DS_Store
 .claude/
 .claude.json
@@ -13,3 +14,4 @@ test-*.mjs
 
 # Runtime data
 .bridge/
+.bridge-*/
