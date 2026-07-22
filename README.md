@@ -1,10 +1,12 @@
+[**中文**](./README.zh.md) | English
+
 # codex-claude-bridge-feishu
 
-> 📱💻 AI coding agent bridge for Feishu/Lark — supports **OpenAI Codex** & **Claude Code**. Code, debug, and refactor from your phone.
+> 📱💻 AI coding agent bridge for Feishu/Lark — supports **Claude Code** & **OpenAI Codex**. Code, debug, and refactor from your phone.
 
 A lightweight Node.js daemon that bridges Feishu/Lark to your local AI coding agent. Send a message in Feishu, the agent executes in your project directory, and responses stream back as real-time cards with live progress, tool calls, and token usage.
 
-**Now supports Claude Code** (`@anthropic-ai/claude-code`) with the same feature set — just swap `codex-provider.ts` for `claude-provider.ts`.
+**Two agents, one bridge.** Run Claude Code via `@anthropic-ai/claude-agent-sdk` or Codex via `@openai/codex-sdk` — same commands, same streaming cards, same experience.
 
 ---
 
@@ -203,9 +205,9 @@ Creates a new Feishu group with a dedicated agent session. All messages in the g
 | `/perm allow\|deny <id>` | Respond to permission request |
 | `/help` | Show all commands |
 
-### Memory Layer (Codex)
+### Memory Layer
 
-The bridge maintains `~/.codex-bridge-memory.md` — persistent cross-session context. The agent reads and updates it automatically.
+The bridge maintains `~/.codex-bridge-memory.md` (Codex) or Claude's native memory system — persistent cross-session context. The agent reads and updates it automatically.
 
 ### Group Collaboration
 

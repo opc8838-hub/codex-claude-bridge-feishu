@@ -1,50 +1,83 @@
-# codex-bridge-feishu
+[**English**](./README.md) | 中文
 
-中文 | [**English**](./README.md)
+# codex-claude-bridge-feishu
 
-> 📱💻 在飞书里操控 [OpenAI Codex CLI](https://github.com/openai/codex) —— 离开电脑也能写代码、改项目、生成文件。
+> 📱💻 飞书/Lark AI 编程助手桥接 — 同时支持 **Claude Code** & **OpenAI Codex**。手机上写代码、修 Bug、重构项目。
 
-**codex-bridge-feishu** 是一个轻量 Node.js 守护进程，把飞书消息桥接到本地 Codex CLI。飞书发一条消息，Codex 就在你的项目目录里执行，思考和工具调用过程实时流式回传，像终端一样直观。
+一个轻量级 Node.js 守护进程，把飞书消息桥接到本地 AI 编程助手。飞书发消息，Agent 在项目目录里执行，思考和工具调用以实时流式卡片回传。
+
+**双 Agent，一套桥接。** Claude Code 用 `@anthropic-ai/claude-agent-sdk`，Codex 用 `@openai/codex-sdk` — 命令相同、卡片相同、体验相同。
 
 ---
 
-## ✨ 为什么选它？
+## ✨ 亮点
 
-| 亮点 | 说明 |
-|------|------|
-| **随时随地写代码** | 手机、平板、任意设备打开飞书就能操控电脑上的 Codex |
-| **实时流式卡片** | 工具调用进度、思考过程、运行结果，像看终端一样实时更新 |
-| **完全读写权限** | 改代码、跑脚本、Git 提交、装依赖，没有任何限制 |
-| **生成文件自动回传** | PPT、图片、视频、文档，Codex 生成完自动推送到飞书对话 |
-| **跨会话记忆** | 告诉它一次你的偏好、项目结构，以后每次对话自动带上 |
-| **群聊协作** | 把机器人拉进群，全组一起用 |
-| **无需公网 IP** | 飞书长连接 WebSocket，不用内网穿透、不用云服务器 |
-| **轻量零依赖** | 纯 Node.js，~300MB 内存，不依赖任何云服务 |
-| **双重认证** | ChatGPT/Codex 订阅 或 OpenAI API Key 都行 |
+### 🆕 `/newchat` — 一个话题、一个群、一个会话
+
+告别混乱的终端标签页。在飞书里：
+
+```
+/newchat 修复登录Bug
+```
+
+机器人**创建新群组**、拉你进群、绑定独立 Agent 会话 — 一个话题一个群。给 AI 群打标签，飞书就是你的终端。
+
+### 🆕 `/mention on|off` — 每群独立 @ 控制
+
+每个群可以独立开关 @ 提及要求：
+
+```
+/mention off   # Agent 看到所有消息 — 完整上下文感知
+/mention on    # 只有 @机器人 的消息才触发响应
+```
+
+通过 `/newchat` 创建的群默认 `off` — Agent 看到所有内容。
+
+### 🆕 双 Agent 支持 — Claude Code + Codex
+
+| Agent | Provider | 说明 |
+|-------|----------|------|
+| **Claude Code** | `claude-provider.ts` | DeepSeek / Anthropic API 兼容 |
+| **OpenAI Codex** | `codex-provider.ts` | ChatGPT / Codex 订阅 或 API Key |
+
+同一套代码、同样的命令、同样的流式卡片。换个目录、换个 `config.env` 就能切换 Agent。
 
 ---
 
 ## 🏗️ 工作原理
 
 ```
-┌──────────┐    WebSocket      ┌──────────────────┐    SDK 启动      ┌──────────┐
-│  飞书 Bot │ ◀══════════════▶  │  Bridge Daemon   │ ─────────────▶ │  Codex   │
-│          │   长连接实时推送    │   (Node.js)      │   子进程        │   CLI    │
-│  📱→📤   │                   │                  │ ◀───────────── │ (本地)   │
-│  📥←📲   │   流式卡片+文件    │  config.env       │   JSON 事件流   │          │
-│          │                   │  session store    │                 │ git 仓库 │
-└──────────┘                   └──────────────────┘                 └──────────┘
+┌──────────┐    WebSocket      ┌──────────────────┐    SDK spawn     ┌───────────┐
+│  飞书 Bot │ ◀══════════════▶  │  Bridge Daemon   │ ──────────────▶ │  AI Agent │
+│          │   长连接实时推送    │   (Node.js)      │   子进程        │  (本地)   │
+│  📱→📤   │                   │                  │ ◀────────────── │           │
+│  📥←📲   │   流式卡片+文本    │  config.env       │   JSON/SSE     │ Claude/   │
+│          │                   │  session store    │   stream        │ Codex     │
+│          │                   │  per-chat bindings│                 │           │
+└──────────┘                   └──────────────────┘                 └───────────┘
 ```
 
 ### 详细流程
 
 1. **消息到达** — 飞书通过 WebSocket 长连接推送 `im.message.receive_v1` 事件
-2. **桥接路由** — `bridge.ts` 识别斜杠命令，否则交给对话引擎
-3. **启动 Codex** — `codex-provider.ts` 通过 `@openai/codex-sdk` 在工作目录启动 Codex 线程
-4. **事件流** — Codex 输出 `ThreadEvent` 流（文字增量、工具调用、结果、用量）
-5. **SSE 转换** — Provider 把 Codex 事件转成统一 SSE 格式
-6. **卡片渲染** — `conversation.ts` 拼装流式 Feishu CardKit 卡片
-7. **实时更新** — 卡片增量通过 REST API 推送到飞书，用户看到实时进度
+2. **桥接路由** — `bridge.ts` 解析每群绑定（chatId → sessionId），检查斜杠命令，然后交给对话引擎
+3. **启动 Agent** — Provider（`claude-provider.ts` 或 `codex-provider.ts`）通过 SDK 在工作目录启动 Agent
+4. **事件流** — Agent 输出文字增量、工具调用、工具结果、用量信息
+5. **SSE 转换** — Provider 把 Agent 事件转成统一 SSE 格式（`text`、`tool_use`、`tool_result`、`result`）
+6. **卡片渲染** — `conversation.ts` 聚合 SSE 事件，构建流式 Feishu CardKit 卡片
+7. **实时更新** — 卡片增量通过 REST API 推送飞书，用户看实时进度
+
+### 技术栈
+
+| 层 | 技术 |
+|-------|-----------|
+| 运行时 | Node.js >= 20 |
+| 语言 | TypeScript (strict) |
+| Agent SDK | `@anthropic-ai/claude-agent-sdk` 或 `@openai/codex-sdk` |
+| 飞书 SDK | `@larksuiteoapi/node-sdk` |
+| 打包 | esbuild (零配置) |
+| 持久化 | JSON 文件 (`.bridge/data/`) |
+| 流式 | Feishu CardKit v2 (流式卡片) |
 
 ---
 
@@ -52,23 +85,17 @@
 
 ### 前置条件
 
-- **Node.js >= 20**
-- **Codex CLI** — `npm install -g @openai/codex`，然后 `codex login`
+- **Node.js >= 20** — `node --version`
+- **AI Agent CLI**（二选一）：
+  - **Claude Code**：安装并配置 `claude --version`
+  - **Codex CLI**：`npm install -g @openai/codex` 然后 `codex login`
 - **飞书自建应用** — 见下方 [飞书配置](#-飞书应用配置)
-
-### 平台支持
-
-| 平台 | 状态 | 守护进程 |
-|------|------|----------|
-| **macOS** | ✅ 完整支持 | `launchd`（`scripts/daemon.sh`） |
-| **Linux** | ✅ 完整支持 | `systemd` 或 `pm2` |
-| **Windows** | ✅ 完整支持 | `pm2` 或任务计划程序 |
 
 ### 安装步骤
 
 ```bash
-git clone https://github.com/opc8838-hub/codex-bridge-feishu.git
-cd codex-bridge-feishu
+git clone https://github.com/opc8838-hub/codex-claude-bridge-feishu.git
+cd codex-claude-bridge-feishu
 npm install
 npm run build
 ```
@@ -83,58 +110,37 @@ cp config.env.example config.env
 
 ```bash
 # ── 必填 ──
-CTI_FEISHU_APP_ID=cli_xxxxxxxxxx        # 飞书开放平台获取
-CTI_FEISHU_APP_SECRET=xxxxxxxxxxxxxx    # 飞书开放平台获取
-CTI_DEFAULT_WORKDIR=/home/me/projects   # Codex 工作目录
+CTI_FEISHU_APP_ID=cli_xxxxxxxxxx
+CTI_FEISHU_APP_SECRET=xxxxxxxxxxxxxx
+CTI_DEFAULT_WORKDIR=/home/me/projects
 
 # ── 可选 ──
 CTI_DEFAULT_MODE=code                   # code | plan | ask
-# CTI_DEFAULT_MODEL=                    # ChatGPT Plus 用户不要填
-CTI_AUTO_APPROVE=true                   # 推荐开启，允许 Codex 自由操作
+CTI_FEISHU_DOMAIN=feishu                # feishu | lark
+CTI_FEISHU_REQUIRE_MENTION=true         # 非 /newchat 群的默认行为
+CTI_AUTO_APPROVE=true
+
+# ── AI Agent（二选一）──
+# Claude Code：
+ANTHROPIC_AUTH_TOKEN=sk-xxx
+ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
+
+# 或 Codex：
+# OPENAI_API_KEY=sk-xxx
 ```
-
-### 认证方式
-
-| 方式 | 操作 | 适合 |
-|------|------|------|
-| **ChatGPT / Codex 订阅** | 终端执行 `codex login` | 有订阅的个人开发者 |
-| **OpenAI API Key** | 在 `config.env` 里设 `OPENAI_API_KEY` | 按量付费 |
-| **第三方 API** | 设 `OPENAI_API_KEY` + `OPENAI_BASE_URL` | 自定义端点 |
-
-> ⚠️ **ChatGPT Plus 用户**：不要设置 `CTI_DEFAULT_MODEL`，让 Codex 自动选择模型。
 
 ### 启动
 
 ```bash
-# 前台测试（所有平台通用）
+# 前台测试
 npm start
-```
 
-**macOS (launchd)：**
-
-```bash
-bash scripts/daemon.sh start
-bash scripts/daemon.sh status
-bash scripts/daemon.sh logs
-```
-
-**Linux (systemd)：**
-
-```bash
-sudo cp scripts/codex-bridge-feishu.service /etc/systemd/system/
-sudo systemctl enable --now codex-bridge-feishu
-sudo journalctl -u codex-bridge-feishu -f
-```
-
-**Windows / Linux / macOS (pm2 通用方案)：**
-
-```bash
-npm install -g pm2
+# PM2（推荐生产环境）
 pm2 start ecosystem.config.cjs
-pm2 save    # 开机自启
+pm2 save
 ```
 
-看到以下输出即表示成功：
+### 验证
 
 ```
 [info]: client ready
@@ -146,16 +152,17 @@ pm2 save    # 开机自启
 
 ## 🔧 飞书应用配置
 
-1. 打开 [飞书开放平台](https://open.feishu.cn/app) → **创建企业自建应用**
-2. 启用 **机器人** 能力
-3. **事件与回调** → 选择 **使用长连接接收事件**
+1. [飞书开放平台](https://open.feishu.cn/app) → **创建企业自建应用**
+2. 开启 **机器人** 能力
+3. **事件与回调** → **使用长连接接收事件**（WebSocket）
 4. 订阅事件：`im.message.receive_v1`
 5. 添加权限：
    - `im:message` — 发送消息
    - `im:message.receive_v1` — 接收消息
    - `im:message:readonly` — 读取消息
    - `im:resource` — 上传/下载文件
-   - `im:chat:readonly` — 读取群信息
+   - `im:chat` / `im:chat:create` / `im:chat:read` / `im:chat:update` — 创建和管理群（`/newchat` 需要）
+   - `im:chat.members:read` / `im:chat.members:write_only` — 管理群成员
    - `im:message.reactions:write_only` — 输入中状态
    - `cardkit:card` — 流式卡片
 6. **发布** 并激活
@@ -164,56 +171,49 @@ pm2 save    # 开机自启
 
 ## 📖 使用指南
 
-### 普通对话
+### `/newchat` — 创建话题群
 
-桥接器启动后，直接在飞书给机器人发消息。Codex 会读取你的消息，在执行目录里工作，把思考和工具调用实时流回飞书。
+```
+/newchat 视频封面生成器
+/newchat 数据库优化 帮我分析慢查询并给出优化建议
+```
 
-### 斜杠命令
+创建新飞书群并绑定独立 Agent 会话。群内所有消息对 Agent 可见（无需 @提及）。每个群独立——五个群、五个并行会话。
+
+### 每群 @提及 控制
+
+```
+/mention off   # Agent 看到所有消息（/newchat 群的默认行为）
+/mention on    # Agent 只响应 @机器人 的消息
+/status        # 显示当前设置，包括 @提及 状态
+```
+
+### 完整命令参考
 
 | 命令 | 说明 |
 |------|------|
-| `/new` | 开启新会话 |
+| `/newchat <名称> [描述]` | **创建新群 + 会话** |
+| `/new [路径]` | 在当前聊天中开启新会话 |
+| `/mention on\|off` | 切换每群 @提及 要求 |
 | `/resume <id>` | 恢复之前的会话 |
 | `/list` | 查看最近会话 |
-| `/delete <id>` | 删除会话 |
-| `/mode code` | 切换到代码模式 |
-| `/mode plan` | 切换到计划模式 |
-| `/mode ask` | 切换到问答模式 |
-| `/usage` | 当前会话 Token 用量 |
-| `/usage_all` | 所有会话 Token 用量 |
-| `/memory` | 查看跨会话记忆 |
-| `/help` | 显示帮助 |
+| `/bind <session_id>` | 绑定到已有会话 |
+| `/cwd /路径` | 切换工作目录 |
+| `/mode code\|plan\|ask` | 切换 Agent 模式 |
+| `/status` | 显示会话状态、CWD、模型、@提及 |
+| `/stop` | 停止当前运行中的任务 |
+| `/perm allow\|deny <id>` | 响应权限请求 |
+| `/help` | 显示所有命令 |
 
 ### 记忆层
 
-桥接器维护一个持久记忆文件 `~/.codex-bridge-memory.md`。每次对话前，文件内容会自动拼到你的消息前面作为上下文。Codex 会记住你的偏好、项目结构、编码规范，跨会话持久保留。
+桥接器维护 `~/.codex-bridge-memory.md`（Codex）或 Claude 原生记忆系统 — 跨会话持久上下文。Agent 自动读取和更新。
 
-**工作流程：**
+### 群聊协作
 
-```
-用户消息 → 读取 ~/.codex-bridge-memory.md → 拼接提示词 → Codex 看到：
-  [持久记忆 — 关于用户偏好、项目上下文、常用设置]
-  用户的项目在 C:\projects，用 TypeScript + Vue3...
-  ---
-  [用户消息]
-  帮我修复登录 Bug
-```
-
-**设置记忆：** 在飞书里直接告诉 Codex 你的偏好：
-
-> 记住：我的项目在 C:\projects，用 TypeScript，缩进 2 空格，提交信息用中文。
-
-Codex 会自动更新记忆文件，之后的会话都会自动带上。
-
-**查看/编辑：** 飞书里用 `/memory`，或直接编辑 `~/.codex-bridge-memory.md`。
-
-### 文件回传
-
-Codex 生成的文件（PPT、图片、视频、文档等）会自动上传到飞书，在对话里直接展示。不需要手动传输。
-
-### 群聊
-
-把机器人拉进群聊。默认只响应 `@机器人` 的消息，设置 `CTI_FEISHU_REQUIRE_MENTION=false` 可以响应所有消息。
+- **一个群 = 一个话题** — 用 `/newchat` 创建专属群
+- **给群打标签** — 在飞书里给 AI 群加标签（如 "Claude"），一键筛选
+- **多 Agent 并行** — Claude 和 Codex 机器人同时运行，各自在不同群里
 
 ---
 
@@ -222,53 +222,52 @@ Codex 生成的文件（PPT、图片、视频、文档等）会自动上传到�
 ```
 src/
 ├── main.ts              # 入口，进程生命周期，看门狗
-├── config.ts            # config.env 解析
-├── types.ts             # TypeScript 类型定义
+├── config.ts            # config.env 加载器
+├── types.ts             # 共享 TypeScript 类型和接口
+├── claude-provider.ts   # Claude Code SDK → 统一 SSE 流
 ├── codex-provider.ts    # Codex SDK → 统一 SSE 流
-├── conversation.ts      # SSE → 流式 CardKit 卡片
+├── conversation.ts      # SSE → 流式 CardKit 卡片（不依赖具体 Provider）
 ├── bridge.ts            # 消息路由，斜杠命令，/help
-├── feishu.ts            # 飞书 WebSocket + REST API
-├── feishu-markdown.ts   # Markdown → 飞书卡片 JSON
-├── store.ts             # JSON 文件会话存储 (.bridge/data/)
-├── permissions.ts       # 权限请求队列
+├── feishu.ts            # 飞书 WebSocket + REST API（建群、加成员）
+├── feishu-markdown.ts   # Markdown → 飞书 CardKit JSON 转换
+├── store.ts             # JSON 文件会话和绑定存储 (.bridge/data/)
+├── permissions.ts       # 待处理权限/批准队列
 ├── delivery.ts          # 流式发送（限速/分块/重试）
-├── validators.ts        # 输入校验
-├── session-scanner.ts   # 已有 Codex 会话发现
+├── validators.ts        # 输入验证和清理
+├── session-scanner.ts   # 发现本地已有 CLI 会话
 └── logger.ts            # 结构化日志（自动脱敏密钥）
 ```
 
 ### 设计原则
 
-- **Provider 抽象** — 只有 `codex-provider.ts` 知道 Codex，换其他 AI 只需写一个新 Provider 文件
-- **统一 SSE 格式** — 所有 Provider 输出相同的 `text | tool_use | tool_result | result | error` 事件
-- **卡片流式引擎** — `conversation.ts` 不依赖具体 Provider，只消费 SSE 渲染卡片
-- **优雅关闭** — SIGTERM/SIGINT 时关闭 Codex 线程、拒绝待处理的权限请求
+- **每群会话隔离** — `bindings.json` 映射 `feishu:{chatId}` → `sessionId`。每个私聊和群聊有独立的 Agent 会话，对话历史互不干扰。
+- **Provider 抽象** — 切换 `claude-provider.ts` ↔ `codex-provider.ts`。两者输出相同的统一 SSE 格式。
+- **卡片流式引擎** — `conversation.ts` 不依赖具体 Provider，只消费 SSE 事件渲染流式卡片。
 
 ---
 
 ## 🚀 对比
 
-| 能力 | codex-bridge-feishu | 只用 Codex CLI |
-|------|---------------------|----------------|
-| 手机操控 | ✅ 飞书 App | ❌ 仅终端 |
+| 功能 | Bridge | 纯 CLI |
+|------|--------|--------|
+| 手机访问 | ✅ 飞书 | ❌ 仅终端 |
+| `/newchat` — 一个话题一个群 | ✅ | ❌ |
 | 群聊协作 | ✅ 拉机器人进群 | ❌ |
-| 多轮会话 | ✅ `/resume` | ✅ `codex resume` |
-| 流式响应 | ✅ 实时卡片 | ✅ 终端输出 |
-| 图片附件 | ✅ 飞书粘贴 | ✅ `--image` 参数 |
-| 会话管理 | ✅ `/list`, `/delete` | ❌ 手动管理 |
-| 多项目切换 | ✅ 每次会话独立目录 | ❌ 单目录 |
-| 跨会话记忆 | ✅ `MEMORY.md` 持久上下文 | ❌ |
-| 文件回传 | ✅ 生成物自动推送飞书 | ❌ |
-| 在线更新 | ✅ `git pull` 即更新 | ❌ `npm update -g` |
+| 每群 @提及 控制 | ✅ `/mention on\|off` | ❌ |
+| 多轮会话 | ✅ `/resume` | ✅ |
+| 流式响应 | ✅ 实时卡片 | ✅ 终端 |
+| 会话管理 | ✅ `/list`、`/bind`、`/status` | ❌ |
+| 多 Agent（Claude + Codex） | ✅ 同一代码库 | ❌ |
+| 跨会话记忆 | ✅ 持久上下文 | ❌ |
 
 ---
 
 ## 🔒 安全
 
-- **无云中转** — Codex 在你本地运行，消息通过飞书加密 WebSocket 传输
-- **密钥脱敏** — 日志自动过滤 `token`、`secret`、`password`、`api_key` 等敏感字段
-- **访问控制** — 可选 `CTI_FEISHU_ALLOWED_USERS` 白名单
-- **自动批准** — 推荐 `CTI_AUTO_APPROVE=true`，Codex 才能自由操作
+- **本地执行** — AI Agent 在你本地运行，不走云中转。
+- **密钥脱敏** — 日志自动过滤 `token`、`secret`、`password`、`api_key`。
+- **访问控制** — `CTI_FEISHU_ALLOWED_USERS` 白名单。
+- **自动批准** — 推荐 `CTI_AUTO_APPROVE=true`，适合无人值守使用。
 
 ---
 
