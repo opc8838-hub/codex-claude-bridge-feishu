@@ -33,13 +33,13 @@ Anyone you authorize can talk to your Claude/Codex:
 
 Your agent, your rules. Private by default — only the creator can use it until you invite.
 
-### 💬 `/newchat` — One Topic, One Group, One Session
+### 💬 `/newchat` — Auto-Create Group, One Topic Per Chat
 
 ```
 /newchat 修复登录Bug
 ```
 
-Bot **creates a new group**, adds you, binds a fresh session. Tag AI groups for one-click filtering. Feishu is your terminal.
+Bot **auto-creates a group**, pulls you in, binds a fresh session — one topic, one group. No manual group setup. Tag AI groups for one-click filtering. Your Feishu is your terminal.
 
 ### 🤖 Dual Agent — Claude Code + Codex
 
