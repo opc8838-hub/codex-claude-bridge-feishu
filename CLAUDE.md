@@ -2,17 +2,18 @@
 
 ## What this project does
 
-A Node.js daemon that bridges Feishu/Lark to local OpenAI Codex CLI.
-Users chat with a Feishu bot → daemon spawns Codex → streams replies back as cards.
+A Node.js daemon that bridges Feishu/Lark to local Claude Code or OpenAI Codex CLI.
+Users chat with a Feishu bot → daemon spawns agent → streams replies back as cards.
 
 Full architecture and setup: see [README.md](./README.md).
 
-## Do NOT introduce
+## Quick install
 
-- New framework dependencies (Express, Next.js, etc.) — keep it a single daemon process
-- Alternative AI providers baked into core — use the provider pattern (`codex-provider.ts`)
-- Any cloud service requirement — the daemon runs locally, zero cloud deps
-- New npm scripts without updating this file
+```bash
+npm i -g codex-claude-bridge-feishu
+codex-bridge setup
+codex-bridge run
+```
 
 ## Quick commands
 
@@ -20,6 +21,7 @@ Full architecture and setup: see [README.md](./README.md).
 npm run dev          # Foreground, tsx hot-reload
 npm run build        # esbuild bundle → dist/daemon.mjs
 npm run typecheck    # tsc --noEmit
+npm test             # vitest (36 tests)
 npm start            # Run built bundle
 ```
 

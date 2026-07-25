@@ -91,7 +91,16 @@ Same bridge codebase, same commands, same streaming cards. Swap agents by runnin
   - **Codex CLI**: `npm install -g @openai/codex` then `codex login`
 - **Feishu self-built app** — see [Feishu Setup](#-feishu-app-setup) below
 
-### Install
+### Quick Install (npm)
+
+```bash
+npm i -g codex-claude-bridge-feishu
+codex-bridge setup           # create config.env
+codex-bridge run             # start in foreground
+codex-bridge start           # start as background service (PM2)
+```
+
+### Manual Install (git)
 
 ```bash
 git clone https://github.com/opc8838-hub/codex-claude-bridge-feishu.git
@@ -102,9 +111,7 @@ npm run build
 
 ### Configure
 
-```bash
-cp config.env.example config.env
-```
+Edit the generated `config.env` (or copy from example):
 
 Edit `config.env`:
 

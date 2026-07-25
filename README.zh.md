@@ -91,7 +91,16 @@
   - **Codex CLI**：`npm install -g @openai/codex` 然后 `codex login`
 - **飞书自建应用** — 见下方 [飞书配置](#-飞书应用配置)
 
-### 安装步骤
+### 快速安装（npm 全局安装）
+
+```bash
+npm i -g codex-claude-bridge-feishu
+codex-bridge setup           # 创建 config.env
+codex-bridge run             # 前台启动
+codex-bridge start           # 后台服务（PM2）
+```
+
+### 手动安装（git clone）
 
 ```bash
 git clone https://github.com/opc8838-hub/codex-claude-bridge-feishu.git
@@ -102,11 +111,7 @@ npm run build
 
 ### 配置
 
-```bash
-cp config.env.example config.env
-```
-
-编辑 `config.env`：
+编辑生成的 `config.env`（或从示例复制）：
 
 ```bash
 # ── 必填 ──
@@ -118,6 +123,7 @@ CTI_DEFAULT_WORKDIR=/home/me/projects
 CTI_DEFAULT_MODE=code                   # code | plan | ask
 CTI_FEISHU_DOMAIN=feishu                # feishu | lark
 CTI_FEISHU_REQUIRE_MENTION=true         # 非 /newchat 群的默认行为
+CTI_COT_MODE=off                        # off | brief | detailed
 CTI_AUTO_APPROVE=true
 
 # ── AI Agent（二选一）──
@@ -132,7 +138,10 @@ ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
 ### 启动
 
 ```bash
-# 前台测试
+# npm 全局安装
+codex-bridge run
+
+# 或 git 安装
 npm start
 
 # PM2（推荐生产环境）
