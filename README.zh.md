@@ -12,35 +12,69 @@
 
 ## ✨ 亮点
 
-### 🆕 `/newchat` — 一个话题、一个群、一个会话
+### 🚀 一条命令安装
 
-告别混乱的终端标签页。在飞书里：
+```bash
+npm i -g codex-claude-bridge-feishu
+codex-bridge setup && codex-bridge run
+```
+
+不用 git clone，不用手动配置。交互式引导，一分钟跑起来。
+
+### 🔗 共享你的 Agent
+
+授权后别人也能和你的 Claude/Codex 聊天：
+
+```
+/invite user @张三     → 私信权限
+/invite group          → 本群所有人可用
+/invite admin @李四    → 管理权限
+```
+
+你的 Agent，你说了算。默认私有，只有创建者能用。
+
+### 💬 `/newchat` — 一个话题、一个群、一个会话
 
 ```
 /newchat 修复登录Bug
 ```
 
-机器人**创建新群组**、拉你进群、绑定独立 Agent 会话 — 一个话题一个群。给 AI 群打标签，飞书就是你的终端。
+机器人**创建新群组**、拉你进群、绑定独立会话。给 AI 群打标签，飞书就是你的终端。
 
-### 🆕 `/mention on|off` — 每群独立 @ 控制
-
-每个群可以独立开关 @ 提及要求：
-
-```
-/mention off   # Agent 看到所有消息 — 完整上下文感知
-/mention on    # 只有 @机器人 的消息才触发响应
-```
-
-通过 `/newchat` 创建的群默认 `off` — Agent 看到所有内容。
-
-### 🆕 双 Agent 支持 — Claude Code + Codex
+### 🤖 双 Agent — Claude Code + Codex
 
 | Agent | Provider | 说明 |
 |-------|----------|------|
 | **Claude Code** | `claude-provider.ts` | DeepSeek / Anthropic API 兼容 |
 | **OpenAI Codex** | `codex-provider.ts` | ChatGPT / Codex 订阅 或 API Key |
 
-同一套代码、同样的命令、同样的流式卡片。换个目录、换个 `config.env` 就能切换 Agent。
+一套安装，两个 Agent。命令相同、卡片相同、体验相同。
+
+### 📌 工作区书签
+
+```
+/ws save 前端    → 收藏当前项目目录
+/ws use 前端     → 一键切换
+```
+
+五个项目来回切，不用记路径。
+
+### 🧠 智能输出 — COT 模式
+
+```
+/cot brief    → 卡片显示工具摘要，干净结果单独发
+/cot detailed → 完整过程卡片 + 单独结果
+```
+
+不用在一堆工具调用里翻找最终答案。
+
+### ⚡ 实时流式卡片
+
+工具调用、文件编辑、命令输出 — 在飞书 CardKit v2 卡片里实时直播。看着 Agent 干活。
+
+### 🔒 本地运行，不走云
+
+Agent 在你电脑上跑。数据不出本机，不走云中转。访问控制、密钥脱敏、加密传输。
 
 ---
 

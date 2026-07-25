@@ -12,35 +12,69 @@ A lightweight Node.js daemon that bridges Feishu/Lark to your local AI coding ag
 
 ## ✨ Highlights
 
-### 🆕 `/newchat` — One Topic, One Group, One Session
+### 🚀 One-Command Install
 
-No more messy terminal tabs. In Feishu:
+```bash
+npm i -g codex-claude-bridge-feishu
+codex-bridge setup && codex-bridge run
+```
+
+No git clone, no manual config. Setup wizard, scan a QR-code, done.
+
+### 🔗 Share Your Agent
+
+Anyone you authorize can talk to your Claude/Codex:
+
+```
+/invite user @张三     → DM access
+/invite group          → everyone in this group
+/invite admin @李四    → can manage access
+```
+
+Your agent, your rules. Private by default — only the creator can use it until you invite.
+
+### 💬 `/newchat` — One Topic, One Group, One Session
 
 ```
 /newchat 修复登录Bug
 ```
 
-The bot **creates a new group**, adds you, and binds a fresh agent session — one topic per group. Tag all your AI groups for one-click filtering. Your Feishu becomes your terminal.
+Bot **creates a new group**, adds you, binds a fresh session. Tag AI groups for one-click filtering. Feishu is your terminal.
 
-### 🆕 `/mention on|off` — Per-Group @ Control
-
-Each group can independently toggle the @mention requirement:
-
-```
-/mention off   # All messages visible to the agent — full context awareness
-/mention on    # Only @bot messages trigger responses
-```
-
-Groups created via `/newchat` default to `off` — the agent sees everything.
-
-### 🆕 Dual Agent Support — Claude Code + Codex
+### 🤖 Dual Agent — Claude Code + Codex
 
 | Agent | Provider | Notes |
 |-------|----------|-------|
 | **Claude Code** | `claude-provider.ts` | DeepSeek / Anthropic API compatible |
 | **OpenAI Codex** | `codex-provider.ts` | ChatGPT / Codex subscription or API key |
 
-Same bridge codebase, same commands, same streaming cards. Swap agents by running from a different directory with a different `config.env`.
+Same bridge, same commands, same streaming cards. One install, both agents.
+
+### 📌 Workspace Bookmarks
+
+```
+/ws save 前端    → bookmark current project
+/ws use 前端     → switch instantly
+```
+
+Five projects, no path memorization.
+
+### 🧠 Smart Output — COT Mode
+
+```
+/cot brief    → tools in card, clean answer as message
+/cot detailed → full process visible
+```
+
+No more scrolling through tool noise to find the answer.
+
+### ⚡ Real-Time Streaming Cards
+
+Tool calls, file edits, command output — streamed live in Feishu CardKit v2 cards. Watch your agent work.
+
+### 🔒 Local-First, Zero Cloud
+
+Agent runs on your machine. No cloud proxy, no data leaves your computer. Access control, secret redaction, encrypted transport.
 
 ---
 
