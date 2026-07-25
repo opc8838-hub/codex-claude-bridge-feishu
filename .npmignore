@@ -1,0 +1,9 @@
+src/__tests__/
+.bridge/
+.bridge-*/
+config.env
+config.*.env
+*.bat
+test-*.mjs
+.claude/
+.claude.json

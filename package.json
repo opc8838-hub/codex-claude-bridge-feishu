@@ -1,21 +1,41 @@
 {
-  "name": "codex-bridge-feishu",
-  "version": "1.0.0",
-  "description": "Codex Bridge for Feishu — chat with OpenAI Codex CLI from Feishu/Lark",
+  "name": "codex-claude-bridge-feishu",
+  "version": "1.1.0",
+  "description": "AI coding agent bridge for Feishu/Lark — supports Claude Code & OpenAI Codex",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/opc8838-hub/codex-bridge-feishu"
+    "url": "https://github.com/opc8838-hub/codex-claude-bridge-feishu"
   },
+  "bin": {
+    "codex-bridge": "bin/cli.js",
+    "claude-bridge": "bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "vitest.config.ts",
+    "ecosystem.config.cjs",
+    "scripts/build.js",
+    "scripts/codex-hidden-launcher.cs",
+    "src/",
+    "tsconfig.json",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
   "keywords": [
+    "claude-code",
     "codex",
     "openai",
+    "anthropic",
     "feishu",
     "lark",
     "chatbot",
     "ai-coding",
-    "bridge"
+    "bridge",
+    "ai-agent"
   ],
   "scripts": {
     "build": "node scripts/build.js",
@@ -23,7 +43,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dev": "tsx src/main.ts"
+    "dev": "tsx src/main.ts",
+    "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.60.0",
