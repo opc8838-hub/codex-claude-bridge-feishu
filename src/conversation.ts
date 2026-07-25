@@ -111,6 +111,7 @@ export async function processMessage(
       }
     }
 
+    const autoApprove = binding.autoApprove !== null ? binding.autoApprove : ctx.config.autoApprove;
     const stream = ctx.provider.streamChat({
       prompt: text,
       sessionId,
@@ -120,6 +121,7 @@ export async function processMessage(
       workingDirectory: binding.workingDirectory || session?.working_directory || undefined,
       abortController,
       permissionMode,
+      autoApprove,
       files,
     });
 

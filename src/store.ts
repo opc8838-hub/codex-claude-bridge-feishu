@@ -8,9 +8,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import type {
+  AccessEntry,
   BridgeSession,
   BridgeMessage,
   ChannelBinding,
+  WorkspaceEntry,
   AuditLogInput,
   PermissionLinkInput,
   PermissionLinkRecord,
@@ -72,6 +74,8 @@ export class JsonFileStore {
   private dedupKeys = new Map<string, number>();
   private locks = new Map<string, LockEntry>();
   private sessionUsage = new Map<string, TokenUsage>();
+  private workspaces = new Map<string, WorkspaceEntry>();
+  private access: AccessEntry = { creator: '', allowedUsers: [], allowedChats: [], admins: [] };
   private auditLog: Array<AuditLogInput & { id: string; createdAt: string }> = [];
 
   constructor(config: Config) {
@@ -127,6 +131,18 @@ export class JsonFileStore {
     for (const [id, u] of Object.entries(usageData)) {
       this.sessionUsage.set(id, u);
     }
+
+    const workspacesData = readJson<Record<string, WorkspaceEntry>>(
+      path.join(DATA_DIR, 'workspaces.json'), {},
+    );
+    for (const [name, w] of Object.entries(workspacesData)) {
+      this.workspaces.set(name, w);
+    }
+
+    this.access = readJson<AccessEntry>(
+      path.join(DATA_DIR, 'access.json'),
+      { creator: '', allowedUsers: [], allowedChats: [], admins: [] },
+    );
   }
 
   private persistSessions(): void {
@@ -199,6 +215,8 @@ export class JsonFileStore {
       model: data.model,
       mode: (this.config.defaultMode as 'code' | 'plan' | 'ask') || 'code',
       requireMention: data.requireMention ?? true,
+      cotMode: this.config.cotMode || 'off',
+      autoApprove: null,
       active: true,
       createdAt: now(),
       updatedAt: now(),
@@ -436,5 +454,113 @@ export class JsonFileStore {
 
   getAllUsage(): Map<string, TokenUsage> {
     return new Map(this.sessionUsage);
+  }
+
+  // ── Access Control ──
+
+  private persistAccess(): void {
+    writeJson(path.join(DATA_DIR, 'access.json'), this.access);
+  }
+
+  getAccess(): AccessEntry {
+    return { ...this.access };
+  }
+
+  setCreator(userId: string): void {
+    if (!this.access.creator) {
+      this.access.creator = userId;
+      this.access.allowedUsers.push(userId);
+      this.persistAccess();
+    }
+  }
+
+  isCreatorOrAdmin(userId: string): boolean {
+    return userId === this.access.creator || this.access.admins.includes(userId);
+  }
+
+  isAuthorized(userId: string, chatId: string): boolean {
+    // No restrictions set — allow everyone (backward compat)
+    if (!this.access.allowedUsers.length && !this.access.allowedChats.length) return true;
+    // Creator and admins always allowed
+    if (this.isCreatorOrAdmin(userId)) return true;
+    // Check allowed users list
+    if (this.access.allowedUsers.includes(userId)) return true;
+    // Check allowed chats list
+    if (this.access.allowedChats.includes(chatId)) return true;
+    return false;
+  }
+
+  addAllowedUser(userId: string): boolean {
+    if (this.access.allowedUsers.includes(userId)) return false;
+    this.access.allowedUsers.push(userId);
+    this.persistAccess();
+    return true;
+  }
+
+  addAllowedChat(chatId: string): boolean {
+    if (this.access.allowedChats.includes(chatId)) return false;
+    this.access.allowedChats.push(chatId);
+    this.persistAccess();
+    return true;
+  }
+
+  addAdmin(userId: string): boolean {
+    if (this.access.admins.includes(userId)) return false;
+    this.access.admins.push(userId);
+    this.persistAccess();
+    return true;
+  }
+
+  removeAllowedUser(userId: string): boolean {
+    if (userId === this.access.creator) return false; // can't remove creator
+    const idx = this.access.allowedUsers.indexOf(userId);
+    if (idx < 0) return false;
+    this.access.allowedUsers.splice(idx, 1);
+    this.persistAccess();
+    return true;
+  }
+
+  removeAllowedChat(chatId: string): boolean {
+    const idx = this.access.allowedChats.indexOf(chatId);
+    if (idx < 0) return false;
+    this.access.allowedChats.splice(idx, 1);
+    this.persistAccess();
+    return true;
+  }
+
+  removeAdmin(userId: string): boolean {
+    const idx = this.access.admins.indexOf(userId);
+    if (idx < 0) return false;
+    this.access.admins.splice(idx, 1);
+    this.persistAccess();
+    return true;
+  }
+
+  // ── Workspace Management ──
+
+  private persistWorkspaces(): void {
+    writeJson(path.join(DATA_DIR, 'workspaces.json'), Object.fromEntries(this.workspaces));
+  }
+
+  saveWorkspace(name: string, dir: string): WorkspaceEntry {
+    const entry: WorkspaceEntry = { name, path: dir, createdAt: now() };
+    this.workspaces.set(name, entry);
+    this.persistWorkspaces();
+    return entry;
+  }
+
+  getWorkspace(name: string): WorkspaceEntry | null {
+    return this.workspaces.get(name) ?? null;
+  }
+
+  listWorkspaces(): WorkspaceEntry[] {
+    return Array.from(this.workspaces.values())
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  removeWorkspace(name: string): boolean {
+    const existed = this.workspaces.delete(name);
+    if (existed) this.persistWorkspaces();
+    return existed;
   }
 }

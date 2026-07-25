@@ -45,6 +45,29 @@ function readMemory(): string {
   return '';
 }
 
+function buildCotCardSummary(
+  toolNames: string[],
+  toolCount: number,
+  tokenUsage: { input_tokens: number; output_tokens: number; cost_usd?: number } | null,
+): string {
+  const lines: string[] = [];
+  if (toolCount > 0) {
+    const unique = [...new Set(toolNames)];
+    const toolList = unique.slice(0, 6).join(', ');
+    const more = unique.length > 6 ? ` +${unique.length - 6} more` : '';
+    lines.push(`🔧 ${toolCount} tool call${toolCount > 1 ? 's' : ''}: ${toolList}${more}`);
+  } else {
+    lines.push('✓ Completed');
+  }
+  if (tokenUsage) {
+    const total = tokenUsage.input_tokens + tokenUsage.output_tokens;
+    lines.push(`📊 ${total.toLocaleString()} tokens`);
+  }
+  lines.push('');
+  lines.push('_See message below for details_');
+  return lines.join('\n');
+}
+
 function wrapPromptWithMemory(text: string): string {
   const memory = readMemory();
   if (!memory) return text;
@@ -347,17 +370,34 @@ async function handleMessage(ctx: AppContext, msg: InboundMessage): Promise<void
     }
 
     // Finalize streaming card
+    const cotMode = binding.cotMode || 'off';
+    const cotEnabled = cotMode === 'brief' || cotMode === 'detailed';
     let cardFinalized = false;
+
+    // Build tool summary for COT card
+    const toolNames = Array.from(toolCallTracker.values()).map(t => t.name).filter(Boolean);
+    const cardText = cotEnabled
+      ? buildCotCardSummary(toolNames, toolCallTracker.size, result.tokenUsage)
+      : result.responseText;
+
     try {
       const status = result.hasError ? 'error' : 'completed';
-      cardFinalized = await ctx.feishu.onStreamEnd(msg.chatId, status, result.responseText, result.tokenUsage);
+      cardFinalized = await ctx.feishu.onStreamEnd(msg.chatId, status, cardText, result.tokenUsage);
     } catch (err) {
       console.warn('[bridge] Card finalize failed:', err instanceof Error ? err.message : err);
     }
 
-    // Send response text (skip if card was finalized)
+    // Send response text
     if (result.responseText) {
-      if (!cardFinalized) {
+      if (cotEnabled) {
+        // COT: always send clean answer as separate message
+        await deliver(ctx, msg.chatId, result.responseText, {
+          sessionId: binding.codepilotSessionId,
+          parseMode: 'Markdown',
+          replyToMessageId: msg.messageId,
+        });
+      } else if (!cardFinalized) {
+        // Default: only send if card wasn't finalized
         await deliver(ctx, msg.chatId, result.responseText, {
           sessionId: binding.codepilotSessionId,
           parseMode: 'Markdown',
@@ -433,8 +473,14 @@ async function handleCommand(
         '/list - Discover local CLI sessions',
         '/resume <编号或ID> - Resume a CLI session',
         '/cwd /path - Change working directory',
+        '/ws save|use|list|remove <name> - Workspace bookmarks',
         '/mode plan|code|ask - Change mode',
         '/mention on|off - Toggle @mention requirement',
+        '/cot off|brief|detailed - Chain-of-thought display',
+        '/invite user|admin|group - Authorize access',
+        '/remove user|admin|group - Revoke access',
+        '/config [setting] [value] - View/change settings',
+        '/access - Show access control list',
         '/status - Show current status',
         '/usage - Show token usage for current session',
         '/usage_all - Show token usage across all sessions',
@@ -572,6 +618,87 @@ async function handleCommand(
       break;
     }
 
+    case '/ws': {
+      const wsParts = args.split(/\s+/);
+      const wsAction = wsParts[0]?.toLowerCase();
+      const wsName = wsParts.slice(1).join(' ').trim();
+
+      switch (wsAction) {
+        case 'save': {
+          if (!wsName) {
+            response = 'Usage: /ws save <name>\nSaves current working directory as a named workspace.';
+            break;
+          }
+          const binding = resolveBinding(ctx, msg.chatId);
+          const cwd = binding.workingDirectory || ctx.config.defaultWorkDir || os.homedir();
+          ctx.store.saveWorkspace(wsName, cwd);
+          response = `Workspace **${wsName}** saved → \`${cwd}\``;
+          break;
+        }
+        case 'use': {
+          if (!wsName) {
+            response = 'Usage: /ws use <name>\nSwitches to a saved workspace directory.';
+            break;
+          }
+          const ws = ctx.store.getWorkspace(wsName);
+          if (!ws) {
+            response = `Workspace **${wsName}** not found. Use /ws list to see saved workspaces.`;
+            break;
+          }
+          if (!fs.existsSync(ws.path)) {
+            response = `Workspace **${wsName}** path no longer exists:\n\`${ws.path}\`\nUse /ws remove ${wsName} to delete it.`;
+            break;
+          }
+          const binding = resolveBinding(ctx, msg.chatId);
+          ctx.store.updateChannelBinding(binding.id, { workingDirectory: ws.path });
+          response = `Switched to **${wsName}** → \`${ws.path}\``;
+          break;
+        }
+        case 'list': {
+          const workspaces = ctx.store.listWorkspaces();
+          if (workspaces.length === 0) {
+            response = [
+              '**Workspaces** (empty)',
+              '',
+              'Use `/ws save <name>` to bookmark your current working directory.',
+              'Then `/ws use <name>` to quickly switch between projects.',
+            ].join('\n');
+            break;
+          }
+          const lines = ['**Workspaces:**', ''];
+          for (const w of workspaces) {
+            const exists = fs.existsSync(w.path) ? '' : ' ⚠️';
+            lines.push(`• **${w.name}** → \`${w.path}\`${exists}`);
+          }
+          lines.push('', '/ws use <name> to switch');
+          response = lines.join('\n');
+          break;
+        }
+        case 'remove':
+        case 'rm': {
+          if (!wsName) {
+            response = 'Usage: /ws remove <name>\nDeletes a saved workspace bookmark.';
+            break;
+          }
+          const removed = ctx.store.removeWorkspace(wsName);
+          response = removed
+            ? `Workspace **${wsName}** removed.`
+            : `Workspace **${wsName}** not found.`;
+          break;
+        }
+        default:
+          response = [
+            '**Workspace Commands:**',
+            '',
+            '`/ws save <name>` — Bookmark current directory',
+            '`/ws use <name>` — Switch to saved directory',
+            '`/ws list` — List all workspaces',
+            '`/ws remove <name>` — Delete a bookmark',
+          ].join('\n');
+      }
+      break;
+    }
+
     case '/mode': {
       if (!validateMode(args)) {
         response = 'Usage: /mode plan|code|ask';
@@ -595,6 +722,213 @@ async function handleCommand(
       response = newVal
         ? '@mention required — only @bot messages go to Codex.'
         : '@mention disabled — all messages go to Codex. Use /mention on to re-enable.';
+      break;
+    }
+
+    case '/cot': {
+      const valid = args === 'off' || args === 'brief' || args === 'detailed';
+      if (!valid) {
+        response = [
+          '**COT (Chain of Thought) Modes:**',
+          '',
+          '`/cot off` — Everything in one card (default)',
+          '`/cot brief` — Tool summary card + clean answer message',
+          '`/cot detailed` — Full tool details card + clean answer message',
+          '',
+          'When enabled, agent tool calls and process are shown in the streaming card,',
+          'and the final answer is sent as a separate clean message.',
+        ].join('\n');
+        break;
+      }
+      const binding = resolveBinding(ctx, msg.chatId);
+      ctx.store.updateChannelBinding(binding.id, { cotMode: args as 'off' | 'brief' | 'detailed' });
+      const labels: Record<string, string> = {
+        off: 'COT disabled — everything in one card.',
+        brief: 'COT brief — tool summary in card, clean answer as message.',
+        detailed: 'COT detailed — full process in card, clean answer as message.',
+      };
+      response = labels[args];
+      break;
+    }
+
+    case '/config': {
+      const configParts = args.split(/\s+/);
+      const configKey = configParts[0]?.toLowerCase();
+      const configVal = configParts[1]?.toLowerCase();
+
+      if (!configKey) {
+        // Show all settings
+        const binding = resolveBinding(ctx, msg.chatId);
+        const globalAuto = ctx.config.autoApprove;
+        const bindingAuto = binding.autoApprove;
+        const effectiveAuto = bindingAuto !== null ? bindingAuto : globalAuto;
+        const access = ctx.store.getAccess();
+
+        response = [
+          '**Current Settings**',
+          '',
+          `Mode: **${binding.mode}**     /mode code|plan|ask`,
+          `COT: **${binding.cotMode}**     /cot off|brief|detailed`,
+          `@Mention: **${binding.requireMention ? 'on' : 'off'}**     /mention on|off`,
+          `Auto-Approve: **${effectiveAuto ? 'on' : 'off'}**     /config auto_approve on|off`,
+          `CWD: \`${binding.workingDirectory || '~'}\``,
+          `Model: \`${binding.model || 'default'}\``,
+          binding.sdkSessionId ? `SDK Session: \`${binding.sdkSessionId.slice(0, 16)}...\`` : '',
+          '',
+          `Creator: \`${access.creator || '(not set)'}\``,
+          `Admins: ${access.admins.length}`,
+          `Allowed Users: ${access.allowedUsers.length}`,
+          `Allowed Chats: ${access.allowedChats.length}`,
+        ].filter(Boolean).join('\n');
+        break;
+      }
+
+      switch (configKey) {
+        case 'auto_approve':
+        case 'autoapprove': {
+          if (configVal !== 'on' && configVal !== 'off') {
+            response = 'Usage: /config auto_approve on|off\n\nWhen on, the agent auto-approves tool permissions (no approval cards).';
+            break;
+          }
+          const binding = resolveBinding(ctx, msg.chatId);
+          ctx.store.updateChannelBinding(binding.id, { autoApprove: configVal === 'on' });
+          response = configVal === 'on'
+            ? 'Auto-approve **on** — agent will execute tools without asking.'
+            : 'Auto-approve **off** — agent will ask before running tools.';
+          break;
+        }
+        default:
+          response = [
+            '**Configurable Settings:**',
+            '',
+            '`/config` — Show all settings',
+            '`/config auto_approve on|off` — Toggle auto-approve',
+          ].join('\n');
+      }
+      break;
+    }
+
+    case '/invite': {
+      const inviteParts = args.split(/\s+/);
+      const inviteTarget = inviteParts[0]?.toLowerCase();
+      const isCreator = ctx.store.isCreatorOrAdmin(msg.userId);
+
+      if (!isCreator) {
+        response = 'Only the bot creator or admins can manage access.';
+        break;
+      }
+
+      switch (inviteTarget) {
+        case 'user': {
+          // Get user ID from @mention in original message
+          const mentionId = msg.mentionIds?.[0];
+          if (!mentionId) {
+            response = 'Usage: /invite user @某人\n\n@mention the person you want to authorize.';
+            break;
+          }
+          const added = ctx.store.addAllowedUser(mentionId);
+          response = added
+            ? `User authorized. They can now DM the bot and use it in authorized groups.`
+            : 'User is already authorized.';
+          break;
+        }
+        case 'group': {
+          const added = ctx.store.addAllowedChat(msg.chatId);
+          response = added
+            ? 'This group is now authorized. Everyone in the group can use the bot.'
+            : 'This group is already authorized.';
+          break;
+        }
+        case 'admin': {
+          const mentionId = msg.mentionIds?.[0];
+          if (!mentionId) {
+            response = 'Usage: /invite admin @某人\n\n@mention the person you want to make an admin.';
+            break;
+          }
+          const added = ctx.store.addAdmin(mentionId);
+          // Also ensure they're in allowed users
+          ctx.store.addAllowedUser(mentionId);
+          response = added
+            ? 'Admin added. They can manage access and use the bot anywhere.'
+            : 'User is already an admin.';
+          break;
+        }
+        default:
+          response = [
+            '**Access Control:**',
+            '',
+            '`/invite user @某人` — Authorize a user',
+            '`/invite group` — Authorize this group',
+            '`/invite admin @某人` — Add admin (can manage access)',
+            '',
+            '`/remove user @某人` `/remove group` `/remove admin @某人` — Revoke',
+            '`/access` — Show current access list',
+          ].join('\n');
+      }
+      break;
+    }
+
+    case '/remove': {
+      const removeParts = args.split(/\s+/);
+      const removeTarget = removeParts[0]?.toLowerCase();
+      const isCreator = ctx.store.isCreatorOrAdmin(msg.userId);
+
+      if (!isCreator) {
+        response = 'Only the bot creator or admins can manage access.';
+        break;
+      }
+
+      switch (removeTarget) {
+        case 'user': {
+          const mentionId = msg.mentionIds?.[0];
+          if (!mentionId) {
+            response = 'Usage: /remove user @某人';
+            break;
+          }
+          const removed = ctx.store.removeAllowedUser(mentionId);
+          response = removed ? 'User removed from access list.' : 'User not found in access list.';
+          break;
+        }
+        case 'group': {
+          const removed = ctx.store.removeAllowedChat(msg.chatId);
+          response = removed ? 'Group removed from access list.' : 'Group not found in access list.';
+          break;
+        }
+        case 'admin': {
+          const mentionId = msg.mentionIds?.[0];
+          if (!mentionId) {
+            response = 'Usage: /remove admin @某人';
+            break;
+          }
+          const removed = ctx.store.removeAdmin(mentionId);
+          response = removed ? 'Admin removed.' : 'Admin not found.';
+          break;
+        }
+        default:
+          response = 'Usage: /remove user|group|admin\nUse /invite for details.';
+      }
+      break;
+    }
+
+    case '/access': {
+      const access = ctx.store.getAccess();
+      const lines = ['**Access Control:**', ''];
+      lines.push(`Creator: \`${access.creator || '(not set)'}\``);
+      lines.push('');
+      lines.push(`Admins (${access.admins.length}):`);
+      for (const a of access.admins) lines.push(`  • \`${a}\``);
+      lines.push('');
+      lines.push(`Allowed Users (${access.allowedUsers.length}):`);
+      for (const u of access.allowedUsers) lines.push(`  • \`${u}\``);
+      lines.push('');
+      lines.push(`Allowed Chats (${access.allowedChats.length}):`);
+      for (const c of access.allowedChats) lines.push(`  • \`${c}\``);
+      lines.push('');
+      if (!access.allowedUsers.length && !access.allowedChats.length) {
+        lines.push('⚠️ Access lists are empty — everyone can use the bot.');
+        lines.push('Use `/invite user @某人` or `/invite group` to restrict access.');
+      }
+      response = lines.join('\n');
       break;
     }
 

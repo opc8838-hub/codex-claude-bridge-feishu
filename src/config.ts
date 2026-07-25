@@ -12,6 +12,7 @@ export interface Config {
   defaultWorkDir: string;
   defaultModel?: string;
   defaultMode: string;
+  cotMode: 'off' | 'brief' | 'detailed';
   feishuAppId: string;
   feishuAppSecret: string;
   feishuDomain: string;
@@ -76,5 +77,6 @@ export function loadConfig(): Config {
       ? env.get('CTI_FEISHU_REQUIRE_MENTION') !== 'false'
       : true,
     autoApprove: env.get('CTI_AUTO_APPROVE') === 'true',
+    cotMode: (env.get('CTI_COT_MODE') as 'off' | 'brief' | 'detailed') || 'off',
   };
 }

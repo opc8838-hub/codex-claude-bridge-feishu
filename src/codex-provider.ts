@@ -287,7 +287,7 @@ export class CodexProvider {
   }
 
   streamChat(params: StreamChatParams): ReadableStream<string> {
-    const autoApprove = this.autoApprove;
+    const autoApprove = params.autoApprove !== undefined ? params.autoApprove : this.autoApprove;
     const codexCliPath = this.codexCliPath;
     const resolvedCodexExe = this.resolvedCodexExe;
 

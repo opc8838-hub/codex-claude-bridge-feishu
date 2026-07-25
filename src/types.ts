@@ -31,6 +31,8 @@ export interface InboundMessage {
   callbackMessageId?: string;
   /** File attachments (images, documents) */
   attachments?: FileAttachment[];
+  /** Mentioned user IDs from the original message (for /invite) */
+  mentionIds?: string[];
 }
 
 /** File attachment from Feishu (images, documents). */
@@ -61,6 +63,10 @@ export interface ChannelBinding {
   mode: 'code' | 'plan' | 'ask';
   /** Whether to require @mention in groups (overrides global config) */
   requireMention: boolean;
+  /** COT mode for this binding */
+  cotMode: 'off' | 'brief' | 'detailed';
+  /** Per-binding auto-approve override (null = use global config) */
+  autoApprove: boolean | null;
   /** Whether this binding is currently active */
   active: boolean;
   createdAt: string;
@@ -199,6 +205,25 @@ export interface AuditLogInput {
   summary: string;
 }
 
+// ── Access Control ──────────────────────────────────────────
+
+/** Access control lists stored in .bridge/data/access.json */
+export interface AccessEntry {
+  creator: string;
+  allowedUsers: string[];
+  allowedChats: string[];
+  admins: string[];
+}
+
+// ── Workspace ────────────────────────────────────────────────
+
+/** Named workspace — a bookmark for a working directory. */
+export interface WorkspaceEntry {
+  name: string;
+  path: string;
+  createdAt: string;
+}
+
 // ── Upsert Binding Input ─────────────────────────────────────
 
 /** Input for upserting a channel binding. */
@@ -244,5 +269,6 @@ export interface StreamChatParams {
   workingDirectory?: string;
   abortController?: AbortController;
   permissionMode?: string;
+  autoApprove?: boolean;
   files?: FileAttachment[];
 }

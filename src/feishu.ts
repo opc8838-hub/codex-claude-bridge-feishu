@@ -106,11 +106,11 @@ export class FeishuClient {
   private activeCards = new Map<string, CardState>();
   private cardCreatePromises = new Map<string, Promise<boolean>>();
 
-  private store: { getChannelBinding(chatId: string): { requireMention?: boolean } | null } | null = null;
+  private store: import('./store.js').JsonFileStore | null = null;
 
   constructor(
     config: AppContext['config'],
-    store?: { getChannelBinding(chatId: string): { requireMention?: boolean } | null } | null,
+    store?: import('./store.js').JsonFileStore | null,
   ) {
     this.config = config;
     this.store = store ?? null;
@@ -888,6 +888,16 @@ export class FeishuClient {
   // ── Authorization ──────────────────────────────────────────
 
   isAuthorized(userId: string, chatId: string): boolean {
+    if (this.store) {
+      const access = this.store.getAccess();
+      // If no creator set yet, first DM becomes creator
+      if (!access.creator) {
+        this.store.setCreator(userId);
+        return true;
+      }
+      return this.store.isAuthorized(userId, chatId);
+    }
+    // Fallback: use config whitelist if no store
     const allowed = this.config.feishuAllowedUsers;
     if (!allowed || allowed.length === 0) return true;
     return allowed.includes(userId) || allowed.includes(chatId);
@@ -926,8 +936,39 @@ export class FeishuClient {
 
     // Authorization
     if (!this.isAuthorized(userId, chatId)) {
+      // In unlisted groups where bot is @mentioned, suggest /invite group
+      if (isGroup && this.isBotMentioned(msg.mentions)) {
+        try {
+          if (this.restClient) {
+            await this.restClient.im.message.create({
+              params: { receive_id_type: 'chat_id' },
+              data: {
+                receive_id: chatId,
+                msg_type: 'text',
+                content: JSON.stringify({
+                  text: [
+                    '👋 本群尚未授权使用。',
+                    '',
+                    '请联系管理员在群内发送 `/invite group` 来授权本群。',
+                    '或发送 `/invite user @某人` 授权单个用户。',
+                  ].join('\n'),
+                }),
+              },
+            });
+          }
+        } catch { /* best effort */ }
+      }
       console.warn('[feishu] Unauthorized:', userId, chatId);
       return;
+    }
+
+    // Extract mentioned user IDs (for /invite command)
+    const mentionIds: string[] = [];
+    if (msg.mentions) {
+      for (const m of msg.mentions) {
+        const id = m.id?.open_id || m.id?.user_id || m.id?.union_id;
+        if (id) mentionIds.push(id);
+      }
     }
 
     // Extract content first (needed for slash-command check)
@@ -1029,6 +1070,7 @@ export class FeishuClient {
       text: text.trim(),
       timestamp,
       attachments: attachments.length > 0 ? attachments : undefined,
+      mentionIds: mentionIds.length > 0 ? mentionIds : undefined,
     });
   }
 
