@@ -2,6 +2,8 @@
 
 # Feishu Agent Bridge
 
+[Grok Build](https://x.ai/build) · [Grok 文档](https://docs.x.ai/build/overview) · [Claude Code](https://docs.anthropic.com/en/docs/claude-code) · [Codex](https://github.com/openai/codex) · [飞书开放平台](https://open.feishu.cn)
+
 把飞书 / Lark 接到**本机**编程 Agent。群里 @ 一下，Agent 在你电脑上读代码、改文件、跑命令，回复以 CardKit v2 流式卡片回来。
 
 **一个仓库。Grok · Claude Code · Codex 共用同一套命令、卡片和会话。没有自建云中转，Agent 不出你的电脑。**
@@ -37,9 +39,9 @@ CardKit v2 边生成边刷：文本、工具调用、改文件、用量实时出
 
 | Agent | `CTI_AGENT` | 本机 CLI | 登录 |
 |-------|-------------|---------|------|
-| **Grok**（最新） | `grok` | `grok` | `grok login` → `~/.grok/auth.json` |
-| Claude Code | `claude` | `claude` | `claude auth login` 或 `ANTHROPIC_*` |
-| OpenAI Codex | `codex` | `codex` | `codex login` 或 `OPENAI_API_KEY` |
+| **[Grok](https://x.ai/build)**（最新） | `grok` | `grok` | `grok login` → `~/.grok/auth.json` |
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `claude` | `claude` | `claude auth login` 或 `ANTHROPIC_*` |
+| [OpenAI Codex](https://github.com/openai/codex) | `codex` | `codex` | `codex login` 或 `OPENAI_API_KEY` |
 
 每个 Agent 用自己的飞书应用 + 自己的进程，不要共用一个机器人。
 

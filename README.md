@@ -2,6 +2,8 @@
 
 # Feishu Agent Bridge
 
+[Grok Build](https://x.ai/build) · [Grok docs](https://docs.x.ai/build/overview) · [Claude Code](https://docs.anthropic.com/en/docs/claude-code) · [Codex](https://github.com/openai/codex) · [Feishu Open Platform](https://open.feishu.cn)
+
 Bridge Feishu / Lark to a **local** coding agent. Mention the bot in a group; it reads code, edits files, and runs commands on your machine. Replies stream back as CardKit v2 cards.
 
 **One repo. Grok · Claude Code · Codex share the same commands, cards, and sessions. No cloud relay of ours — the agent stays on your computer.**
@@ -37,9 +39,9 @@ One codebase, three engines. Pick with `CTI_AGENT`. Cards and slash commands sta
 
 | Agent | `CTI_AGENT` | Local CLI | Auth |
 |-------|-------------|---------|------|
-| **Grok** (latest) | `grok` | `grok` | `grok login` → `~/.grok/auth.json` |
-| Claude Code | `claude` | `claude` | `claude auth login` or `ANTHROPIC_*` |
-| OpenAI Codex | `codex` | `codex` | `codex login` or `OPENAI_API_KEY` |
+| **[Grok](https://x.ai/build)** (latest) | `grok` | `grok` | `grok login` → `~/.grok/auth.json` |
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `claude` | `claude` | `claude auth login` or `ANTHROPIC_*` |
+| [OpenAI Codex](https://github.com/openai/codex) | `codex` | `codex` | `codex login` or `OPENAI_API_KEY` |
 
 Give each agent its own Feishu app and process. Do not share one bot across agents.
 
