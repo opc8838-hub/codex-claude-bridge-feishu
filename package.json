@@ -1,7 +1,7 @@
 {
   "name": "codex-claude-bridge-feishu",
   "version": "1.1.0",
-  "description": "AI coding agent bridge for Feishu/Lark — supports Claude Code & OpenAI Codex",
+  "description": "Feishu/Lark bridge for Claude Code, OpenAI Codex, and Grok — three bots, one repo",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -10,7 +10,8 @@
   },
   "bin": {
     "codex-bridge": "bin/cli.js",
-    "claude-bridge": "bin/cli.js"
+    "claude-bridge": "bin/cli.js",
+    "grok-bridge": "bin/cli.js"
   },
   "files": [
     "bin/",
@@ -28,6 +29,7 @@
   "keywords": [
     "claude-code",
     "codex",
+    "grok",
     "openai",
     "anthropic",
     "feishu",
@@ -47,6 +49,7 @@
     "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.62",
     "@larksuiteoapi/node-sdk": "^1.60.0",
     "@openai/codex-sdk": "^0.130.0"
   },

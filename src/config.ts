@@ -7,8 +7,10 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { parseAgent, type AgentName } from './agent-name.js';
 
 export interface Config {
+  agent: AgentName;
   defaultWorkDir: string;
   defaultModel?: string;
   defaultMode: string;
@@ -65,7 +67,11 @@ export function loadConfig(): Config {
     // Config file doesn't exist yet — use defaults
   }
 
+  const agent = parseAgent(env.get('CTI_AGENT') || process.env.CTI_AGENT);
+  process.env.CTI_AGENT = agent;
+
   return {
+    agent,
     defaultWorkDir: env.get('CTI_DEFAULT_WORKDIR') || process.cwd(),
     defaultModel: env.get('CTI_DEFAULT_MODEL') || undefined,
     defaultMode: env.get('CTI_DEFAULT_MODE') || 'code',

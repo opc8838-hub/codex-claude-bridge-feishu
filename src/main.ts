@@ -12,7 +12,7 @@ import crypto from 'node:crypto';
 import { loadConfig, CTI_HOME } from './config.js';
 import type { AppContext } from './types.js';
 import { JsonFileStore } from './store.js';
-import { CodexProvider, resolveCodexCliPath, preflightCheck } from './codex-provider.js';
+import { createProvider } from './agent.js';
 import { PendingPermissions } from './permissions.js';
 import { FeishuClient } from './feishu.js';
 import { setupLogger } from './logger.js';
@@ -45,41 +45,29 @@ async function main(): Promise<void> {
   setupLogger();
 
   const runId = crypto.randomUUID();
-  console.log(`[codex-bridge] Starting (run_id: ${runId})`);
+  const logPrefix = `[${config.agent}-bridge]`;
+  console.log(`${logPrefix} Starting (run_id: ${runId}) agent=${config.agent}`);
 
-  // Validate Feishu config
   if (!config.feishuAppId || !config.feishuAppSecret) {
-    console.error('[codex-bridge] FATAL: CTI_FEISHU_APP_ID and CTI_FEISHU_APP_SECRET must be set in config.env');
+    console.error(`${logPrefix} FATAL: CTI_FEISHU_APP_ID and CTI_FEISHU_APP_SECRET must be set in config.env`);
     process.exit(1);
   }
 
-  // Resolve Codex CLI
-  const cliPath = resolveCodexCliPath();
-  if (!cliPath) {
-    console.error(
-      '[codex-bridge] FATAL: Cannot find the `codex` CLI executable.\n' +
-      '  Tried: CTI_CODEX_EXECUTABLE env, PATH, well-known locations.\n' +
-      '  Fix: Install Codex CLI or set CTI_CODEX_EXECUTABLE=/path/to/codex',
-    );
-    process.exit(1);
-  }
-
-  const check = preflightCheck(cliPath);
-  if (check.ok) {
-    console.log(`[codex-bridge] CLI preflight OK: ${cliPath} (${check.version})`);
-  } else {
-    console.error(
-      `[codex-bridge] FATAL: Codex CLI preflight failed.\n` +
-      `  Path: ${cliPath}\n` +
-      `  Error: ${check.error}`,
-    );
-    process.exit(1);
-  }
-
-  // Assemble AppContext
   const store = new JsonFileStore(config);
   const pendingPerms = new PendingPermissions();
-  const provider = new CodexProvider(cliPath, config.autoApprove);
+
+  let provider;
+  let cliPath: string;
+  try {
+    const created = createProvider(config, pendingPerms);
+    provider = created.provider;
+    cliPath = created.cliPath;
+    console.log(`${logPrefix} CLI preflight OK: ${cliPath} (${created.version ?? 'ok'})`);
+  } catch (err) {
+    console.error(`${logPrefix} FATAL: ${err instanceof Error ? err.message : err}`);
+    process.exit(1);
+  }
+
   const feishu = new FeishuClient(config, store);
 
   const ctx: AppContext = {
@@ -103,7 +91,7 @@ async function main(): Promise<void> {
     startedAt: new Date().toISOString(),
   });
 
-  console.log(`[codex-bridge] Bridge started (PID: ${process.pid})`);
+  console.log(`${logPrefix} Bridge started (PID: ${process.pid})`);
 
   // Graceful shutdown
   let shuttingDown = false;
@@ -111,8 +99,9 @@ async function main(): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
     const reason = signal ? `signal: ${signal}` : 'shutdown requested';
-    console.log(`[codex-bridge] Shutting down (${reason})...`);
+    console.log(`${logPrefix} Shutting down (${reason})...`);
     pendingPerms.denyAll();
+    provider.close?.();
     await feishu.stop();
     writeStatus({ running: false, lastExitReason: reason });
     process.exit(0);
@@ -123,11 +112,11 @@ async function main(): Promise<void> {
   process.on('SIGHUP', () => shutdown('SIGHUP'));
 
   process.on('unhandledRejection', (reason) => {
-    console.error('[codex-bridge] unhandledRejection:', reason instanceof Error ? reason.stack || reason.message : reason);
+    console.error(`${logPrefix} unhandledRejection:`, reason instanceof Error ? reason.stack || reason.message : reason);
     writeStatus({ running: false, lastExitReason: `unhandledRejection: ${reason instanceof Error ? reason.message : String(reason)}` });
   });
   process.on('uncaughtException', (err) => {
-    console.error('[codex-bridge] uncaughtException:', err.stack || err.message);
+    console.error(`${logPrefix} uncaughtException:`, err.stack || err.message);
     writeStatus({ running: false, lastExitReason: `uncaughtException: ${err.message}` });
     process.exit(1);
   });
@@ -165,7 +154,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error('[codex-bridge] Fatal error:', err instanceof Error ? err.stack || err.message : err);
+  console.error('[bridge] Fatal error:', err instanceof Error ? err.stack || err.message : err);
   try { writeStatus({ running: false, lastExitReason: `fatal: ${err instanceof Error ? err.message : String(err)}` }); } catch { /* ignore */ }
   process.exit(1);
 });

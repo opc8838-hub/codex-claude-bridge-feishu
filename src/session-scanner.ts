@@ -9,6 +9,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import type { CliSessionInfo } from './types.js';
+import { scanGrokSessions } from './session-scanner-grok.js';
+import { scanClaudeSessions } from './session-scanner-claude.js';
 
 const CODEX_SESSION_INDEX = path.join(os.homedir(), '.codex', 'session_index.jsonl');
 
@@ -21,6 +23,7 @@ interface CodexSessionIndexEntry {
 interface ScanOptions {
   limit?: number;
   maxAgeDays?: number;
+  agent?: string;
 }
 
 export function formatRelativeTime(timestampMs: number): string {
@@ -54,6 +57,10 @@ function readCodexSessionIndex(): CodexSessionIndexEntry[] {
 }
 
 export function scanCliSessions(opts?: ScanOptions): CliSessionInfo[] {
+  const agent = (opts?.agent || process.env.CTI_AGENT || 'codex').toLowerCase();
+  if (agent === 'grok') return scanGrokSessions(opts);
+  if (agent === 'claude') return scanClaudeSessions(opts);
+
   const limit = opts?.limit ?? 20;
   const maxAgeDays = opts?.maxAgeDays ?? 30;
   const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;

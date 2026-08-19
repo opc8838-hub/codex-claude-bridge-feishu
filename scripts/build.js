@@ -11,6 +11,7 @@ await esbuild.build({
     // SDK must stay external — it spawns a CLI subprocess and resolves
     // dist/cli.js relative to its own package location.
     '@openai/codex-sdk',
+    '@anthropic-ai/claude-agent-sdk',
     // Feishu/Lark SDK uses __dirname which isn't available in bundled ESM
     '@larksuiteoapi/node-sdk',
     // Node.js built-ins

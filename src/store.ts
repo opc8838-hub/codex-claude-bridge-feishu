@@ -412,7 +412,7 @@ export class JsonFileStore {
   // ── CLI Session Discovery ──
 
   listCliSessions(opts?: { limit?: number }): CliSessionInfo[] {
-    return scanCliSessions({ limit: opts?.limit ?? 20 });
+    return scanCliSessions({ limit: opts?.limit ?? 20, agent: this.config.agent });
   }
 
   // ── Channel Offsets ──

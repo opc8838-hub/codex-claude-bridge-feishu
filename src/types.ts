@@ -11,7 +11,7 @@ import type { Config } from './config.js';
 export interface AppContext {
   config: Config;
   store: import('./store.js').JsonFileStore;
-  provider: import('./codex-provider.js').CodexProvider;
+  provider: import('./agent.js').AgentProvider;
   permissions: import('./permissions.js').PendingPermissions;
   feishu: import('./feishu.js').FeishuClient;
 }

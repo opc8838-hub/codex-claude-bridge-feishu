@@ -1,0 +1,18 @@
+# Changelog
+
+## 1.2.0 — 2026-08-19
+
+**Latest: Grok is a first-class agent.** One repo, three Feishu bots.
+
+- `CTI_AGENT=grok|claude|codex` selects the provider
+- `grok-provider.ts` — ACP `grok agent stdio`
+- `claude-provider.ts` restored (Claude Code SDK)
+- Session `/list` scans `~/.grok/sessions`, `~/.claude/projects`, or Codex index
+- Docs: one product, three bots; sibling repos become redirects
+
+### 中文
+
+**最新：Grok 成为一等 Agent。** 一个仓，三个飞书机器人。
+
+- `CTI_AGENT=grok|claude|codex` 选引擎
+- 命令和卡片共用，三个 BOT 三个飞书应用、三个进程

@@ -81,6 +81,7 @@ export async function processMessage(
             const filePath = path.join(uploadDir, `${Date.now()}-${safeName}`);
             const buffer = Buffer.from(f.data, 'base64');
             fs.writeFileSync(filePath, buffer);
+            f.filePath = filePath;
             return { id: f.id, name: f.name, type: f.type, size: buffer.length, filePath };
           });
           savedContent = `<!--files:${JSON.stringify(fileMeta)}-->${text}`;
