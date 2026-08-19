@@ -2,9 +2,9 @@
 
 # Feishu Agent Bridge
 
-把飞书 / Lark 接到本机编程 Agent。群里 @ 一下，Agent 在你电脑上读代码、改文件、跑命令，回复以 CardKit v2 流式卡片回来。
+把飞书 / Lark 接到**本机**编程 Agent。群里 @ 一下，Agent 在你电脑上读代码、改文件、跑命令，回复以 CardKit v2 流式卡片回来。
 
-**一个仓库。Grok · Claude Code · Codex 共用同一套命令、卡片和会话。**
+**一个仓库。Grok · Claude Code · Codex 共用同一套命令、卡片和会话。没有自建云中转，Agent 不出你的电脑。**
 
 ---
 
@@ -53,7 +53,62 @@ Agent 每次开聊前会读 `~/.codex-bridge-memory.md`（偏好、项目路径�
 - **模式** — `/mode code|plan|ask`
 - **工作区书签** — `/ws save|use|list|remove`
 - **发文件** — `/sendfile` 把本机文件推回飞书
-- **本地优先** — Agent 跑在你电脑上，代码不经过第三方托管
+- **本地优先** — Agent、代码、会话都在本机；飞书只传聊天和卡片
+
+---
+
+## 本地运行，不走云
+
+Agent 在你电脑上跑。项目文件、会话记录、密钥都留在本机，不经过我们自己的云中转。飞书只负责把消息和流式卡片送来送去。
+
+- **访问控制** — `/invite` `/remove` `/access`，按用户 / 管理员 / 整群授权
+- **密钥脱敏** — `config.env` 已 gitignore；日志里的 token、Bearer、App Secret 会打码
+- **加密传输** — 飞书 WebSocket / REST 走 TLS；本机到 Agent 是 SDK 拉起的子进程，不经公网
+
+---
+
+## 工作原理
+
+```mermaid
+flowchart LR
+  subgraph FEISHU["飞书 Bot"]
+    U["手机 / 桌面"]
+  end
+  subgraph DAEMON["Bridge Daemon · Node.js"]
+    D["config.env<br/>session store<br/>per-chat bindings"]
+  end
+  subgraph AGENT["AI Agent · 本机"]
+    A["Grok / Claude / Codex"]
+  end
+  FEISHU -->|"WebSocket 长连接 · 实时推送"| DAEMON
+  DAEMON -->|"流式卡片 + 文本"| FEISHU
+  DAEMON -->|"SDK spawn 子进程"| AGENT
+  AGENT -->|"JSON / SSE stream"| DAEMON
+```
+
+```
+飞书 Bot（手机 / 桌面）
+        │  WebSocket 长连接 · 实时推送
+        │  流式卡片 + 文本
+        ▼
+Bridge Daemon（Node.js）
+  config.env · session store · per-chat bindings
+        │  SDK spawn 子进程
+        ▼
+AI Agent（本机）  Grok / Claude / Codex
+        │  JSON / SSE stream
+        └──────────▶ Daemon 再刷回飞书卡片
+```
+
+### 详细流程
+
+1. **消息到达** — 飞书通过 WebSocket 长连接推送 `im.message.receive_v1` 事件
+2. **桥接路由** — `bridge.ts` 解析每群绑定（`chatId → sessionId`），先处理斜杠命令，再交给对话引擎
+3. **启动 Agent** — Provider（`grok-provider.ts` / `claude-provider.ts` / `codex-provider.ts`）在工作目录用 SDK 拉起本机 Agent
+4. **事件流** — Agent 输出文字增量、工具调用、工具结果、用量信息
+5. **SSE 转换** — Provider 把 Agent 事件收成统一 SSE（`text`、`tool_use`、`tool_result`、`permission_request`、`result`）
+6. **卡片渲染** — `conversation.ts` 聚合 SSE，构建流式 Feishu CardKit 卡片
+7. **实时更新** — 卡片增量经 REST API 推回飞书，群里能看到进度；写文件 / 跑命令会先弹权限卡
 
 ---
 
@@ -114,21 +169,6 @@ CTI_AGENT=codex  CTI_CONFIG_PATH=config.codex.env  CTI_HOME=.bridge-codex  node 
 ```bash
 grok --resume <session-id>
 ```
-
----
-
-## 原理
-
-```
-飞书机器人  --WS-->  本仓守护进程  --provider-->  grok | claude | codex
-                          CTI_AGENT=
-```
-
-- `grok-provider.ts` — ACP `grok agent stdio`
-- `claude-provider.ts` — `@anthropic-ai/claude-agent-sdk`
-- `codex-provider.ts` — `@openai/codex-sdk`
-
-三套都吐同一份 SSE（`text`、`tool_use`、`tool_result`、`permission_request`、`result`）。卡片和斜杠命令共用。
 
 ---
 

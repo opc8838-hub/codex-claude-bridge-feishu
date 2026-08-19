@@ -3,6 +3,7 @@
 ## 1.2.1 — 2026-08-19
 
 - README: full product highlights (group chat, per-chat @mention, multi-turn, streaming, session management, multi-agent, cross-session memory)
+- README: local-first section + 3-box architecture diagram + 7-step flow
 - Sibling repos `feishu-grok-bridge` and `feishu-claude-bridge` deleted — this is the only public bridge
 
 ## 1.2.0 — 2026-08-19

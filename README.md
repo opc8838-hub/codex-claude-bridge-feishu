@@ -4,7 +4,7 @@
 
 Bridge Feishu / Lark to a **local** coding agent. Mention the bot in a group; it reads code, edits files, and runs commands on your machine. Replies stream back as CardKit v2 cards.
 
-**One repo. Grok · Claude Code · Codex share the same commands, cards, and session model.**
+**One repo. Grok · Claude Code · Codex share the same commands, cards, and sessions. No cloud relay of ours — the agent stays on your computer.**
 
 ---
 
@@ -53,7 +53,62 @@ Before each turn the agent reads `~/.codex-bridge-memory.md` (preferences, proje
 - **Modes** — `/mode code|plan|ask`
 - **Workspace bookmarks** — `/ws save|use|list|remove`
 - **File send** — `/sendfile` uploads a local file back to the chat
-- **Local-first** — the agent stays on your machine
+- **Local-first** — agent, code, and sessions stay on disk; Feishu only carries chat and cards
+
+---
+
+## Runs locally. No cloud relay.
+
+The agent process lives on your machine. Project files, session records, and secrets never go through a backend we host. Feishu only moves chat text and streaming cards.
+
+- **Access control** — `/invite` `/remove` `/access` for users, admins, and whole groups
+- **Secret masking** — `config.env` is gitignored; tokens, Bearer headers, and App Secrets are redacted in logs
+- **Encrypted transport** — Feishu WebSocket / REST over TLS; the daemon talks to the agent as a local child process, not over the public internet
+
+---
+
+## How it works
+
+```mermaid
+flowchart LR
+  subgraph FEISHU["Feishu Bot"]
+    U["Phone / Desktop"]
+  end
+  subgraph DAEMON["Bridge Daemon · Node.js"]
+    D["config.env<br/>session store<br/>per-chat bindings"]
+  end
+  subgraph AGENT["AI Agent · local"]
+    A["Grok / Claude / Codex"]
+  end
+  FEISHU -->|"WebSocket · live push"| DAEMON
+  DAEMON -->|"streaming cards + text"| FEISHU
+  DAEMON -->|"SDK spawn child"| AGENT
+  AGENT -->|"JSON / SSE stream"| DAEMON
+```
+
+```
+Feishu Bot (phone / desktop)
+        │  WebSocket long-lived · live push
+        │  streaming cards + text
+        ▼
+Bridge Daemon (Node.js)
+  config.env · session store · per-chat bindings
+        │  SDK spawn child process
+        ▼
+AI Agent (local)  Grok / Claude / Codex
+        │  JSON / SSE stream
+        └──────────▶ Daemon updates the Feishu card
+```
+
+### Flow
+
+1. **Message in** — Feishu pushes `im.message.receive_v1` over the WebSocket
+2. **Route** — `bridge.ts` resolves the per-chat binding (`chatId → sessionId`), handles slash commands, then hands off to the conversation engine
+3. **Spawn agent** — the provider (`grok-provider.ts` / `claude-provider.ts` / `codex-provider.ts`) starts the local agent in the working directory via SDK
+4. **Event stream** — the agent emits text deltas, tool calls, tool results, and usage
+5. **SSE normalize** — the provider maps those events to one SSE shape (`text`, `tool_use`, `tool_result`, `permission_request`, `result`)
+6. **Card render** — `conversation.ts` folds SSE into a live Feishu CardKit card
+7. **Live update** — card patches go back over the REST API so the group sees progress; writes and shell commands first show a permission card
 
 ---
 
@@ -114,21 +169,6 @@ Resume the same Grok session in a terminal:
 ```bash
 grok --resume <session-id>
 ```
-
----
-
-## How it works
-
-```
-Feishu bot  --WS-->  daemon (this repo)  --provider-->  grok | claude | codex
-                         CTI_AGENT=
-```
-
-- `grok-provider.ts` — ACP `grok agent stdio`
-- `claude-provider.ts` — `@anthropic-ai/claude-agent-sdk`
-- `codex-provider.ts` — `@openai/codex-sdk`
-
-All three emit the same SSE (`text`, `tool_use`, `tool_result`, `permission_request`, `result`). Cards and slash commands are shared.
 
 ---
 
