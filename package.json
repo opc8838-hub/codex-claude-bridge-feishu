@@ -1,7 +1,7 @@
 {
   "name": "codex-claude-bridge-feishu",
   "version": "1.1.0",
-  "description": "Feishu/Lark bridge for Claude Code, OpenAI Codex, and Grok — three bots, one repo",
+  "description": "Feishu/Lark bridge for local coding agents — group chat, per-chat @mention, multi-turn sessions, streaming cards, Grok/Claude/Codex, cross-session memory",
   "type": "module",
   "license": "MIT",
   "repository": {

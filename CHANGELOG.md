@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.1 — 2026-08-19
+
+- README: full product highlights (group chat, per-chat @mention, multi-turn, streaming, session management, multi-agent, cross-session memory)
+- Sibling repos `feishu-grok-bridge` and `feishu-claude-bridge` deleted — this is the only public bridge
+
 ## 1.2.0 — 2026-08-19
 
 **Latest: Grok is a first-class agent.** One repo, three Feishu bots.

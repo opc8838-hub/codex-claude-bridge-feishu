@@ -2,48 +2,62 @@
 
 # Feishu Agent Bridge
 
-**One repo. Three Feishu bots: Grok · Claude Code · Codex.**
+Bridge Feishu / Lark to a **local** coding agent. Mention the bot in a group; it reads code, edits files, and runs commands on your machine. Replies stream back as CardKit v2 cards.
 
-> 📱💻 Latest: **Grok Build CLI** is a first-class agent. Same cards, same commands, same daemon — pick the bot with `CTI_AGENT`.
+**One repo. Grok · Claude Code · Codex share the same commands, cards, and session model.**
 
-A Node.js daemon that bridges Feishu/Lark to a **local** coding agent. Send a message in Feishu; the agent runs in your project; replies stream back as CardKit v2 cards.
+---
 
-This is the **only** bridge you need. Do not run `feishu-grok-bridge` or the archived Claude-only repo as a second product — they redirect here.
+## Highlights
 
-| Feishu bot | `CTI_AGENT` | Local CLI | Auth |
-|------------|-------------|-----------|------|
+### Group collaboration
+Each Feishu group has its own session. `/newchat` creates a group and binds a fresh session — one topic, one chat. Teammates can join, watch the run, and send follow-ups.
+
+### Per-group @mention control
+Groups require @mention by default so chatter does not wake the agent. `/mention off` sends every message in that group to the agent; `/mention on` restores the gate. DMs always go through. The setting is stored per chat.
+
+### Multi-turn conversations
+The same DM or group keeps talking to the same local CLI session. `/stop` aborts the current turn; the next message continues the thread.
+
+### Streaming replies
+CardKit v2 updates live: text, tool calls, file edits, token usage. `/cot brief|detailed` splits the process card from a clean answer; `/cot off` keeps everything in one card.
+
+### Session management
+| Command | What it does |
+|---------|----------------|
+| `/new` `/newchat` | New session here, or a new group + session |
+| `/list` `/resume` | Discover local CLI sessions and resume one |
+| `/bind` | Bind this chat to an existing session id |
+| `/cwd` `/ws` | Change cwd; bookmark project paths |
+| `/status` `/usage` | Live status and token usage |
+| Terminal | `grok --resume` / `claude --resume` / `codex resume` on the same session |
+
+### Multiple agents
+One codebase, three engines. Pick with `CTI_AGENT`. Cards and slash commands stay the same:
+
+| Agent | `CTI_AGENT` | Local CLI | Auth |
+|-------|-------------|---------|------|
 | **Grok** (latest) | `grok` | `grok` | `grok login` → `~/.grok/auth.json` |
 | Claude Code | `claude` | `claude` | `claude auth login` or `ANTHROPIC_*` |
 | OpenAI Codex | `codex` | `codex` | `codex login` or `OPENAI_API_KEY` |
 
-**Three bots = three Feishu apps + three processes**, one codebase:
+Give each agent its own Feishu app and process. Do not share one bot across agents.
 
-```bash
-# Bot 1 — Grok
-CTI_AGENT=grok   CTI_CONFIG_PATH=config.grok.env   CTI_HOME=.bridge-grok   node dist/daemon.mjs
+### Cross-session memory
+Before each turn the agent reads `~/.codex-bridge-memory.md` (preferences, project paths, conventions). `/memory` shows it in Feishu. Tell the agent “remember: …” and it updates the file for the next session.
 
-# Bot 2 — Claude
-CTI_AGENT=claude CTI_CONFIG_PATH=config.claude.env CTI_HOME=.bridge-claude node dist/daemon.mjs
+### Also included
 
-# Bot 3 — Codex
-CTI_AGENT=codex  CTI_CONFIG_PATH=config.codex.env  CTI_HOME=.bridge-codex  node dist/daemon.mjs
-```
-
-Each `config.*.env` has its **own** `CTI_FEISHU_APP_ID` / `SECRET` (do not share one bot across agents).
-
----
-
-## ✨ Highlights
-
-- **`/newchat`** — bot creates a group and binds a session (one topic, one chat)
-- **Streaming cards** — tools, edits, usage live in CardKit v2
-- **Permissions** — allow once / session / deny (`1` `2` `3`)
-- **`/ws`** workspace bookmarks, **`/invite`** access control, **`/cot`** clean vs detailed output
-- **Local-first** — agent stays on your machine
+- **Permission cards** — writes and shell commands ask first: allow once / allow this session / deny (buttons or `1` `2` `3`)
+- **Access control** — `/invite` `/remove` `/access` for users, admins, and whole groups
+- **Modes** — `/mode code|plan|ask`
+- **Workspace bookmarks** — `/ws save|use|list|remove`
+- **File send** — `/sendfile` uploads a local file back to the chat
+- **Local-first** — the agent stays on your machine
 
 ---
 
-## 📦 Install
+## Install
 
 ```bash
 git clone https://github.com/opc8838-hub/codex-claude-bridge-feishu.git
@@ -60,6 +74,7 @@ CTI_AGENT=grok
 CTI_FEISHU_APP_ID=cli_xxxxxxxx
 CTI_FEISHU_APP_SECRET=xxxxxxxx
 CTI_DEFAULT_WORKDIR=/path/to/project
+CTI_FEISHU_REQUIRE_MENTION=true
 CTI_AUTO_APPROVE=false
 ```
 
@@ -74,17 +89,25 @@ npm i -g codex-claude-bridge-feishu
 codex-bridge setup && codex-bridge run
 ```
 
+Run several agents (one Feishu app, config, and process each):
+
+```bash
+CTI_AGENT=grok   CTI_CONFIG_PATH=config.grok.env   CTI_HOME=.bridge-grok   node dist/daemon.mjs
+CTI_AGENT=claude CTI_CONFIG_PATH=config.claude.env CTI_HOME=.bridge-claude node dist/daemon.mjs
+CTI_AGENT=codex  CTI_CONFIG_PATH=config.codex.env  CTI_HOME=.bridge-codex  node dist/daemon.mjs
+```
+
 ### Prerequisites
 
 - Node.js >= 20
 - The CLI for the agent you pick (`grok --version` / `claude --version` / `codex --version`)
-- One Feishu enterprise self-built app **per bot** (Bot capability, long-connection events, `im.message.receive_v1`, `cardkit:card`, `im:chat*`, `im:resource`)
+- One Feishu enterprise self-built app **per agent** (Bot capability, long-connection events, `im.message.receive_v1`, `cardkit:card`, `im:chat*`, `im:resource`)
 
 ---
 
-## 💬 Commands
+## Commands
 
-`/newchat` `/new` `/list` `/resume` `/bind` `/cwd` `/ws` `/mode` `/mention` `/cot` `/invite` `/remove` `/access` `/status` `/usage` `/stop` `/perm` `/memory` `/help`
+`/newchat` `/new` `/list` `/resume` `/bind` `/cwd` `/ws` `/mode` `/mention` `/cot` `/invite` `/remove` `/access` `/status` `/usage` `/stop` `/perm` `/memory` `/sendfile` `/help`
 
 Resume the same Grok session in a terminal:
 
@@ -94,7 +117,7 @@ grok --resume <session-id>
 
 ---
 
-## 🏗 How it works
+## How it works
 
 ```
 Feishu bot  --WS-->  daemon (this repo)  --provider-->  grok | claude | codex
@@ -109,19 +132,9 @@ All three emit the same SSE (`text`, `tool_use`, `tool_result`, `permission_requ
 
 ---
 
-## 🔒 Security
+## Security
 
-Keep App Secrets in `config.env` (gitignored). Prefer `CTI_AUTO_APPROVE=false` for Grok/Claude. Do not commit secrets.
-
----
-
-## Family (redirects)
-
-| Repo | Role |
-|------|------|
-| **This repo** | The product — 3 bots |
-| [feishu-grok-bridge](https://github.com/opc8838-hub/feishu-grok-bridge) | Archived redirect |
-| [feishu-claude-bridge](https://github.com/opc8838-hub/feishu-claude-bridge) | Archived redirect |
+Keep App Secrets in `config.env` (gitignored). Prefer `CTI_AUTO_APPROVE=false` for Grok / Claude. Do not commit secrets.
 
 ---
 
