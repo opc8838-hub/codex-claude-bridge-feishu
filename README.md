@@ -1,5 +1,9 @@
 [**中文**](./README.zh.md) | English
 
+> **Update (2026-08-19):** Latest Feishu bridge now supports **Grok Build CLI**.  
+> New repo → **[feishu-grok-bridge](https://github.com/opc8838-hub/feishu-grok-bridge)** (separate bot + process).  
+> This repo stays the Claude Code + Codex bridge.
+
 # codex-claude-bridge-feishu
 
 > 📱💻 AI coding agent bridge for Feishu/Lark — supports **Claude Code** & **OpenAI Codex**. Code, debug, and refactor from your phone.

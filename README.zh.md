@@ -1,5 +1,9 @@
 [**English**](./README.md) | 中文
 
+> **更新（2026-08-19）：** 飞书桥最新已支持 **Grok Build CLI**。  
+> 新仓库 → **[feishu-grok-bridge](https://github.com/opc8838-hub/feishu-grok-bridge)**（独立机器人 + 独立进程）。  
+> 本仓继续维护 Claude Code + Codex。
+
 # codex-claude-bridge-feishu
 
 > 📱💻 飞书/Lark AI 编程助手桥接 — 同时支持 **Claude Code** & **OpenAI Codex**。手机上写代码、修 Bug、重构项目。
