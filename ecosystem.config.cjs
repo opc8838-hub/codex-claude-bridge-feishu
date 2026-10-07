@@ -9,9 +9,12 @@ const runtimeDir = path.resolve(process.env.CTI_HOME || path.join(path.dirname(c
 module.exports = {
   apps: [{
     name: `feishu-bridge-${instanceId}`,
-    script: path.join(__dirname, 'dist', 'daemon.mjs'),
+    // PM2 interprets a script path containing spaces as a shell command on POSIX.
+    // Start Node directly and pass the daemon path as a separate argument.
+    script: process.execPath,
+    args: [path.join(__dirname, 'dist', 'daemon.mjs')],
     cwd: path.dirname(configPath),
-    interpreter: process.execPath,
+    interpreter: 'none',
     autorestart: true,
     max_restarts: 10,
     restart_delay: 5000,

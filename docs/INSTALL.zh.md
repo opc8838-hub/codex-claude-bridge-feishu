@@ -1,4 +1,6 @@
-# 新电脑安装指南（1.3.0）
+# 新电脑安装指南（1.3.1）
+
+苹果用户可先看 [macOS 安装与验证说明](INSTALL.macos.md)，包含 Apple Silicon / Intel 的安装命令和验证范围。
 
 支持选择 Codex、Claude Code 或 Grok。先装一个机器人并验收，再增加第二个。桥接进程在你自己的电脑上运行，电脑必须开机并联网；无需公网 IP。模型请求仍会发给你选择的模型服务商。
 
@@ -146,10 +148,10 @@ node bin/cli.js start
 - **一直 thinking**：运行 `node bin/cli.js logs` 查看错误。空闲 5 分钟会报错并终止任务；工具执行允许更长等待，最多 60 分钟无输出。不会静默更换更贵的模型。
 - **流式卡片没有结束**：核对 CardKit 权限和日志中的限流错误。新版串行更新卡片并对最终提交的限流错误做有限重试。
 - **Windows 找不到 CLI**：先确保在同一用户终端里 `codex --version` 或 `claude --version` 可用。自定义安装位置可设置 `CTI_CODEX_EXECUTABLE` / `CTI_CLAUDE_CODE_EXECUTABLE`；Codex 应填写原生 `.exe` 路径。
-- **从 npm 安装还是旧版**：npm registry 与 GitHub 发布独立。本次优先使用 GitHub 源码或 Release 附件；检查 `package.json` 是否为 `1.3.0`。
+- **从 npm 安装还是旧版**：npm registry 与 GitHub 发布独立。本次优先使用 GitHub 源码或 Release 附件；检查 `package.json` 是否为 `1.3.1`。
 
 ## 9. 给朋友的安装包
 
-[Releases](https://github.com/opc8838-hub/codex-claude-bridge-feishu/releases) 中的 `.tgz` 是已构建 npm 安装包，可执行 `npm install -g ./codex-claude-bridge-feishu-1.3.0.tgz`，在自己的工作目录执行 `codex-bridge setup codex`，填写配置后 `codex-bridge run`。Windows 包包含隐藏启动器；macOS / Linux 使用本机 CLI。
+[Releases](https://github.com/opc8838-hub/codex-claude-bridge-feishu/releases) 中的 `.tgz` 是已构建 npm 安装包，可执行 `npm install -g ./codex-claude-bridge-feishu-1.3.1.tgz`，在自己的工作目录执行 `codex-bridge setup codex`，填写配置后 `codex-bridge run`。Windows 包包含隐藏启动器；macOS / Linux 使用本机 CLI。
 
 源码 ZIP 解压后按第 2 节执行 `npm ci`、`npm run build`、`node bin/cli.js setup codex`。安装包需要联网安装 npm 依赖，不含模型账号、飞书密钥、聊天记录或作者的运行配置。

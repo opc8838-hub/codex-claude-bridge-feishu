@@ -31,7 +31,8 @@ describe('new computer installation', () => {
       const configPath = path.join(dir, 'config.env');
       const config = parseEnvFile(fs.readFileSync(configPath, 'utf8'));
       expect(config.get('CTI_AGENT')).toBe(agent);
-      expect(config.get('CTI_DEFAULT_WORKDIR')).toBe(dir.replaceAll('\\', '/'));
+      // macOS resolves /var to /private/var when the child enters its cwd.
+      expect(fs.realpathSync(config.get('CTI_DEFAULT_WORKDIR')!)).toBe(fs.realpathSync(dir));
       expect(config.get('CTI_AUTO_APPROVE')).toBe('false');
       fs.writeFileSync(configPath, 'CTI_FEISHU_APP_SECRET=keep-me');
       execFileSync(process.execPath, [cli, 'setup', agent], { cwd: dir, env: cleanEnv() });
@@ -64,7 +65,9 @@ describe('new computer installation', () => {
     expect(first.name).not.toBe(second.name);
     expect(first.env.CTI_HOME).not.toBe(second.env.CTI_HOME);
     expect(first.cwd).toBe(dir);
-    expect(first.script).toBe(path.join(root, 'dist', 'daemon.mjs'));
+    expect(first.script).toBe(process.execPath);
+    expect(first.args).toEqual([path.join(root, 'dist', 'daemon.mjs')]);
+    expect(first.interpreter).toBe('none');
     expect(first.env.CTI_CODEX_EXECUTABLE).toBeUndefined();
   });
 
