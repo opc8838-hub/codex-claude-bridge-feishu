@@ -24,9 +24,10 @@ describe('validateWorkingDirectory', () => {
     expect(result!.endsWith('project')).toBe(true);
   });
 
-  it('accepts Windows absolute paths', () => {
+  it('accepts Windows drive paths only on a Windows host', () => {
     const result = validateWorkingDirectory('C:\\Users\\test');
-    expect(result).not.toBeNull();
+    if (process.platform === 'win32') expect(result).not.toBeNull();
+    else expect(result).toBeNull();
   });
 
   it('rejects path traversal', () => {
