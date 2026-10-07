@@ -114,7 +114,7 @@ AI Agent (local)  Grok / Claude / Codex
 
 ---
 
-## Install (1.3.0)
+## Install (1.3.1)
 
 See the [step-by-step installation guide](docs/INSTALL.zh.md) for Windows setup, Feishu permissions, multiple instances and migration.
 
@@ -144,7 +144,7 @@ node bin/cli.js status
 
 Each config has its own process and runtime data. No author-specific paths or accounts are required. Use `CTI_CONFIG_PATH` to select another config and `CTI_HOME` to retain an existing data directory. Reboot startup requires separate configuration.
 
-Prebuilt packages: [Releases](https://github.com/opc8838-hub/codex-claude-bridge-feishu/releases). **The npm registry version is independent of GitHub releases; use this checkout or the release 1.3.0 tarball.**
+Prebuilt packages: [Releases](https://github.com/opc8838-hub/codex-claude-bridge-feishu/releases). **The npm registry version is independent of GitHub releases; use this checkout or the release 1.3.1 tarball.**
 
 Prerequisites: Node.js 22 recommended (minimum 20.19), an installed/logged-in agent CLI, and one Feishu self-built app per bot. Windows builds include the hidden launcher automatically.
 

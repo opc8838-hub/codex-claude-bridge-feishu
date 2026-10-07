@@ -114,7 +114,7 @@ AI Agent（本机）  Grok / Claude / Codex
 
 ---
 
-## 安装（1.3.0）
+## 安装（1.3.1）
 
 **新电脑请先看[完整中文安装指南](docs/INSTALL.zh.md)**：包含 Windows、飞书后台配置、后台运行、多实例和旧版迁移。
 
@@ -142,7 +142,7 @@ node bin/cli.js start
 node bin/cli.js status
 ```
 
-每个配置文件的进程和数据目录独立，不再写死作者电脑路径。安装包见 [Releases](https://github.com/opc8838-hub/codex-claude-bridge-feishu/releases)。**npm registry 当前旧版本与 GitHub 发布独立；请使用本仓库源码或 Release 的 1.3.0 安装包。**
+每个配置文件的进程和数据目录独立，不再写死作者电脑路径。安装包见 [Releases](https://github.com/opc8838-hub/codex-claude-bridge-feishu/releases)。**npm registry 当前旧版本与 GitHub 发布独立；请使用本仓库源码或 Release 的 1.3.1 安装包。**
 
 前置：Node.js 22 推荐（最低 20.19）、对应 Agent CLI 已登录、自己的飞书自建应用。Windows 构建会自动生成隐藏控制台启动器。后台进程仍需电脑开机联网；开机自启要单独配置。
 

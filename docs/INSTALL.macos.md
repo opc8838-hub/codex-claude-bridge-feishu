@@ -40,7 +40,7 @@ node bin/cli.js logs
 仓库 CI 在 macOS 15 的 Apple Silicon 和 Intel 环境分别运行 Node 20、22 检查，报告记录实际系统版本、CPU 架构和每项结果。
 
 - `npm ci`、类型检查、回归测试、构建。
-- 从源码构建的 npm 包，以及 GitHub Release 已发布的 1.3.0 包，分别在干净目录安装。
+- 每次提交检查源码构建的 npm 包；发布后手动触发 CI，还会下载 GitHub Release 的安装包，在干净目录复验并核对版本。1.3.1 修复了 Mac 安装路径含空格时 PM2 后台启动失败的问题。
 - 全局命令、三种 Agent 初始化、中文及空格路径、配置文件权限、已有配置保留。
 - 随包 Codex / Claude CLI 的 `--version` 启动检查。
 - 前台退出信号传递；PM2 两个实例的启动、重启、状态、日志和停止。

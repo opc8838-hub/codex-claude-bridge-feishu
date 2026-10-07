@@ -11,6 +11,7 @@ assert.equal(process.platform, 'darwin');
 assert.equal(process.env.GITHUB_ACTIONS, 'true');
 assert.equal(process.env.RUNNER_ENVIRONMENT, 'github-hosted');
 const root = process.cwd();
+const expectedVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 const temp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bridge-macos-')));
 const publishedTarball = process.argv[2] ? path.resolve(process.argv[2]) : null;
 if (publishedTarball) assert.ok(fs.existsSync(publishedTarball));
@@ -50,6 +51,9 @@ try {
     const prefix = path.join(temp, `${label}-prefix`);
     run('npm', ['install', '--global', '--prefix', prefix, tarball, 'pm2@7.0.4', '--no-audit', '--no-fund']);
     const installed = path.join(prefix, 'lib/node_modules/codex-claude-bridge-feishu');
+    const installedVersion = JSON.parse(fs.readFileSync(path.join(installed, 'package.json'), 'utf8')).version;
+    assert.equal(installedVersion, expectedVersion, `${label}: installed version`);
+    passed(`${label}: installed package version ${installedVersion}`);
     const cli = path.join(prefix, 'bin/codex-bridge');
     const cliEnv = { ...env, PATH: `${prefix}/bin:${env.PATH}`, npm_config_prefix: prefix };
     for (const name of ['config.env.example', 'docs/INSTALL.zh.md', 'dist/daemon.mjs']) {
