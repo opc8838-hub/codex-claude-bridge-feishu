@@ -6,7 +6,7 @@
 
 Bridge Feishu / Lark to a **local** coding agent. Mention the bot in a group; it reads code, edits files, and runs commands on your machine. Replies stream back as CardKit v2 cards.
 
-**One repo. Grok · Claude Code · Codex share the same commands, cards, and sessions. No cloud relay of ours — the agent stays on your computer.**
+**One repo. Grok · Claude Code · Codex share the same commands, cards, and sessions. The bridge process runs locally without an author-operated relay; model requests still go to your chosen provider.**
 
 ---
 
@@ -50,7 +50,7 @@ Before each turn the agent reads `~/.codex-bridge-memory.md` (preferences, proje
 
 ### Also included
 
-- **Permission cards** — writes and shell commands ask first: allow once / allow this session / deny (buttons or `1` `2` `3`)
+- **Permission cards** — Claude / Grok support allow once / allow this session / deny; see the installation guide for Codex SDK approval limitations
 - **Access control** — `/invite` `/remove` `/access` for users, admins, and whole groups
 - **Modes** — `/mode code|plan|ask`
 - **Workspace bookmarks** — `/ws save|use|list|remove`
@@ -61,7 +61,7 @@ Before each turn the agent reads `~/.codex-bridge-memory.md` (preferences, proje
 
 ## Runs locally. No cloud relay.
 
-The agent process lives on your machine. Project files, session records, and secrets never go through a backend we host. Feishu only moves chat text and streaming cards.
+The agent process and session records live on your machine, without an author-operated backend. Feishu handles chat and cards; the agent sends prompts and relevant code/file context to your chosen model provider.
 
 - **Access control** — `/invite` `/remove` `/access` for users, admins, and whole groups
 - **Secret masking** — `config.env` is gitignored; tokens, Bearer headers, and App Secrets are redacted in logs
@@ -110,55 +110,41 @@ AI Agent (local)  Grok / Claude / Codex
 4. **Event stream** — the agent emits text deltas, tool calls, tool results, and usage
 5. **SSE normalize** — the provider maps those events to one SSE shape (`text`, `tool_use`, `tool_result`, `permission_request`, `result`)
 6. **Card render** — `conversation.ts` folds SSE into a live Feishu CardKit card
-7. **Live update** — card patches go back over the REST API so the group sees progress; writes and shell commands first show a permission card
+7. **Live update** — card patches go back over the REST API so the group sees progress; approval behavior depends on the agent and permission configuration
 
 ---
 
-## Install
+## Install (1.3.0)
 
-```bash
+See the [step-by-step installation guide](docs/INSTALL.zh.md) for Windows setup, Feishu permissions, multiple instances and migration.
+
+```text
 git clone https://github.com/opc8838-hub/codex-claude-bridge-feishu.git
 cd codex-claude-bridge-feishu
-npm install
+npm ci
 npm run build
-cp config.env.example config.env
+node bin/cli.js setup codex
 ```
 
-Edit `config.env`:
+Use `setup claude` or `setup grok` for another agent. Edit the generated `config.env` with your own Feishu credentials and working directory. Log in to the selected CLI, then run:
 
-```bash
-CTI_AGENT=grok
-CTI_FEISHU_APP_ID=cli_xxxxxxxx
-CTI_FEISHU_APP_SECRET=xxxxxxxx
-CTI_DEFAULT_WORKDIR=/path/to/project
-CTI_FEISHU_REQUIRE_MENTION=true
-CTI_AUTO_APPROVE=false
+```text
+node bin/cli.js run
 ```
 
-```bash
-npm run dev      # or npm start
+After a successful foreground test, stop with Ctrl+C, then:
+
+```text
+npm install -g pm2
+node bin/cli.js start
+node bin/cli.js status
 ```
 
-Or globally:
+Each config has its own process and runtime data. No author-specific paths or accounts are required. Use `CTI_CONFIG_PATH` to select another config and `CTI_HOME` to retain an existing data directory. Reboot startup requires separate configuration.
 
-```bash
-npm i -g codex-claude-bridge-feishu
-codex-bridge setup && codex-bridge run
-```
+Prebuilt packages: [Releases](https://github.com/opc8838-hub/codex-claude-bridge-feishu/releases). **The npm registry version is independent of GitHub releases; use this checkout or the release 1.3.0 tarball.**
 
-Run several agents (one Feishu app, config, and process each):
-
-```bash
-CTI_AGENT=grok   CTI_CONFIG_PATH=config.grok.env   CTI_HOME=.bridge-grok   node dist/daemon.mjs
-CTI_AGENT=claude CTI_CONFIG_PATH=config.claude.env CTI_HOME=.bridge-claude node dist/daemon.mjs
-CTI_AGENT=codex  CTI_CONFIG_PATH=config.codex.env  CTI_HOME=.bridge-codex  node dist/daemon.mjs
-```
-
-### Prerequisites
-
-- Node.js >= 20
-- The CLI for the agent you pick (`grok --version` / `claude --version` / `codex --version`)
-- One Feishu enterprise self-built app **per agent** (Bot capability, long-connection events, `im.message.receive_v1`, `cardkit:card`, `im:chat*`, `im:resource`)
+Prerequisites: Node.js 22 recommended (minimum 20.19), an installed/logged-in agent CLI, and one Feishu self-built app per bot. Windows builds include the hidden launcher automatically.
 
 ---
 

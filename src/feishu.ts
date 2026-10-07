@@ -37,7 +37,8 @@ import {
 const DEDUP_MAX = 1000;
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const TYPING_EMOJI = 'Typing';
-const CARD_THROTTLE_MS = 200;
+const CARD_THROTTLE_MS = 500;
+const CARD_FINALIZE_RETRY_MS = 600;
 
 /** State for an active CardKit v2 streaming card. */
 interface CardState {
@@ -48,8 +49,11 @@ interface CardState {
   toolCalls: ToolCallInfo[];
   thinking: boolean;
   pendingText: string | null;
+  pendingRevision: number;
+  flushedRevision: number;
   lastUpdateAt: number;
   throttleTimer: ReturnType<typeof setTimeout> | null;
+  updateInFlight: Promise<void> | null;
 }
 
 type FeishuMessageEventData = {
@@ -376,8 +380,11 @@ export class FeishuClient {
         toolCalls: [],
         thinking: true,
         pendingText: null,
+        pendingRevision: 0,
+        flushedRevision: 0,
         lastUpdateAt: 0,
         throttleTimer: null,
+        updateInFlight: null,
       });
 
       console.log(`[feishu] Streaming card created: cardId=${cardId}, msgId=${messageId}`);
@@ -396,6 +403,13 @@ export class FeishuClient {
       state.thinking = false;
     }
     state.pendingText = text;
+    state.pendingRevision++;
+
+    this.scheduleCardUpdate(chatId, state);
+  }
+
+  private scheduleCardUpdate(chatId: string, state: CardState): void {
+    if (state.updateInFlight) return;
 
     const elapsed = Date.now() - state.lastUpdateAt;
     if (elapsed < CARD_THROTTLE_MS && state.lastUpdateAt > 0) {
@@ -417,21 +431,50 @@ export class FeishuClient {
 
   private flushCardUpdate(chatId: string): void {
     const state = this.activeCards.get(chatId);
-    if (!state || !this.restClient) return;
+    if (!state || !this.restClient || state.updateInFlight) return;
+
+    if (state.throttleTimer) {
+      clearTimeout(state.throttleTimer);
+      state.throttleTimer = null;
+    }
 
     const content = buildStreamingContent(state.pendingText || '', state.toolCalls);
+    const revision = state.pendingRevision;
     state.sequence++;
     const seq = state.sequence;
     const cardId = state.cardId;
+    state.lastUpdateAt = Date.now();
 
-    (this.restClient as any).cardkit.v1.cardElement.content({
+    state.updateInFlight = Promise.resolve((this.restClient as any).cardkit.v1.cardElement.content({
       path: { card_id: cardId, element_id: 'streaming_content' },
       data: { content, sequence: seq },
-    }).then(() => {
-      state.lastUpdateAt = Date.now();
-    }).catch((err: unknown) => {
-      console.warn('[feishu] streamContent failed:', err instanceof Error ? err.message : err);
+    })).catch((err: unknown) => {
+      console.warn(`[feishu] streamContent failed: code=${this.getApiErrorCode(err) ?? 'unknown'}`);
+    }).finally(() => {
+      if (this.activeCards.get(chatId) !== state) return;
+      state.flushedRevision = Math.max(state.flushedRevision, revision);
+      state.updateInFlight = null;
+      if (state.pendingRevision > state.flushedRevision) {
+        this.scheduleCardUpdate(chatId, state);
+      }
     });
+  }
+
+  private getApiErrorCode(err: unknown): number | undefined {
+    const value = err as any;
+    return value?.code ?? value?.response?.data?.code;
+  }
+
+  private async runFinalCardRequest(operation: () => Promise<unknown>): Promise<void> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await operation();
+        return;
+      } catch (err) {
+        if (this.getApiErrorCode(err) !== 99991400 || attempt >= 3) throw err;
+        await new Promise((resolve) => setTimeout(resolve, CARD_FINALIZE_RETRY_MS * (attempt + 1)));
+      }
+    }
   }
 
   private updateToolProgress(chatId: string, tools: ToolCallInfo[]): void {
@@ -460,15 +503,23 @@ export class FeishuClient {
       state.throttleTimer = null;
     }
 
+    if (state.updateInFlight) {
+      await state.updateInFlight;
+      if (state.throttleTimer) {
+        clearTimeout(state.throttleTimer);
+        state.throttleTimer = null;
+      }
+    }
+
     try {
       state.sequence++;
-      await (this.restClient as any).cardkit.v1.card.settings({
+      await this.runFinalCardRequest(() => (this.restClient as any).cardkit.v1.card.settings({
         path: { card_id: state.cardId },
         data: {
           settings: JSON.stringify({ config: { streaming_mode: false } }),
           sequence: state.sequence,
         },
-      });
+      }));
 
       const statusLabels: Record<string, string> = {
         completed: '✅ Completed',
@@ -499,13 +550,13 @@ export class FeishuClient {
 
       const finalCardJson = buildFinalCardJson(responseText, state.toolCalls, footer);
       state.sequence++;
-      await (this.restClient as any).cardkit.v1.card.update({
+      await this.runFinalCardRequest(() => (this.restClient as any).cardkit.v1.card.update({
         path: { card_id: state.cardId },
         data: {
           card: { type: 'card_json', data: finalCardJson },
           sequence: state.sequence,
         },
-      });
+      }));
 
       console.log(`[feishu] Card finalized: cardId=${state.cardId}, status=${status}, elapsed=${formatElapsed(elapsedMs)}`);
       return true;

@@ -24,6 +24,24 @@ import type {
   PermissionRequestInfo,
 } from './types.js';
 
+const MODEL_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+const TOOL_IDLE_TIMEOUT_MS = 60 * 60 * 1000;
+
+class HeartbeatTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Heartbeat timeout: no output for ${Math.round(timeoutMs / 60_000)} minutes`);
+    this.name = 'HeartbeatTimeoutError';
+  }
+}
+
+function readWithTimeout(reader: ReadableStreamDefaultReader<string>, timeoutMs: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new HeartbeatTimeoutError(timeoutMs)), timeoutMs);
+  });
+  return Promise.race([reader.read(), timeout]).finally(() => clearTimeout(timer));
+}
+
 export type OnPermissionRequest = (perm: PermissionRequestInfo) => Promise<void>;
 export type OnPartialText = (fullText: string) => void;
 export type OnToolEvent = (toolId: string, toolName: string, status: 'running' | 'complete' | 'error') => void;
@@ -126,7 +144,7 @@ export async function processMessage(
       files,
     });
 
-    return await consumeStream(ctx, stream, sessionId, onPermissionRequest, onPartialText, onToolEvent);
+    return await consumeStream(ctx, stream, sessionId, abortController, onPermissionRequest, onPartialText, onToolEvent);
   } finally {
     clearInterval(renewalInterval);
     ctx.store.releaseSessionLock(sessionId, lockId);
@@ -136,10 +154,11 @@ export async function processMessage(
 /**
  * Consume an SSE stream and extract response data.
  */
-async function consumeStream(
+export async function consumeStream(
   ctx: AppContext,
   stream: ReadableStream<string>,
   sessionId: string,
+  abortController: AbortController,
   onPermissionRequest?: OnPermissionRequest,
   onPartialText?: OnPartialText,
   onToolEvent?: OnToolEvent,
@@ -152,13 +171,15 @@ async function consumeStream(
   let hasError = false;
   let errorMessage = '';
   const seenToolResultIds = new Set<string>();
+  const inFlightToolIds = new Set<string>();
   const permissionRequests: PermissionRequestInfo[] = [];
   const fileOutputs: FileOutputItem[] = [];
   let capturedSdkSessionId: string | null = null;
 
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      const timeoutMs = inFlightToolIds.size ? TOOL_IDLE_TIMEOUT_MS : MODEL_IDLE_TIMEOUT_MS;
+      const { done, value } = await readWithTimeout(reader, timeoutMs);
       if (done) break;
 
       const lines = value.split('\n');
@@ -194,6 +215,7 @@ async function consumeStream(
                 name: toolData.name,
                 input: toolData.input,
               });
+              inFlightToolIds.add(toolData.id);
               if (onToolEvent) {
                 try { onToolEvent(toolData.id, toolData.name, 'running'); } catch { /* non-critical */ }
               }
@@ -204,6 +226,7 @@ async function consumeStream(
           case 'tool_result': {
             try {
               const resultData = JSON.parse(event.data);
+              inFlightToolIds.delete(resultData.tool_use_id);
               const newBlock = {
                 type: 'tool_result' as const,
                 tool_use_id: resultData.tool_use_id,
@@ -337,6 +360,9 @@ async function consumeStream(
       sdkSessionId: capturedSdkSessionId,
     };
   } catch (e) {
+    if (e instanceof HeartbeatTimeoutError) {
+      abortController.abort(e);
+    }
     // Best-effort save on stream error
     if (currentText.trim()) {
       contentBlocks.push({ type: 'text', text: currentText });

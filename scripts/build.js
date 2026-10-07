@@ -1,4 +1,6 @@
 import * as esbuild from 'esbuild';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 await esbuild.build({
   entryPoints: ['src/main.ts'],
@@ -23,3 +25,10 @@ await esbuild.build({
 });
 
 console.log('Built dist/daemon.mjs');
+
+if (process.platform === 'win32') {
+  const powershell = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  execFileSync(powershell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
+    path.resolve('scripts/build-codex-hidden.ps1'), '-OutputPath', path.resolve('dist/codex-hidden.exe')],
+  { stdio: 'inherit', windowsHide: true });
+}
