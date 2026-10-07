@@ -118,6 +118,8 @@ AI Agent (local)  Grok / Claude / Codex
 
 See the [step-by-step installation guide](docs/INSTALL.zh.md) for Windows setup, Feishu permissions, multiple instances and migration.
 
+See [macOS installation and verification](docs/INSTALL.macos.md) for Apple Silicon / Intel instructions and the exact CI coverage.
+
 ```text
 git clone https://github.com/opc8838-hub/codex-claude-bridge-feishu.git
 cd codex-claude-bridge-feishu

@@ -118,6 +118,8 @@ AI Agent（本机）  Grok / Claude / Codex
 
 **新电脑请先看[完整中文安装指南](docs/INSTALL.zh.md)**：包含 Windows、飞书后台配置、后台运行、多实例和旧版迁移。
 
+苹果电脑另见 [macOS 安装与验证](docs/INSTALL.macos.md)。CI 同时覆盖 Apple Silicon 与 Intel，以及 Node 20 / 22。
+
 ```text
 git clone https://github.com/opc8838-hub/codex-claude-bridge-feishu.git
 cd codex-claude-bridge-feishu
