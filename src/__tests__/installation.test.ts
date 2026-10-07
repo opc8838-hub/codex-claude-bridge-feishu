@@ -65,7 +65,9 @@ describe('new computer installation', () => {
     expect(first.name).not.toBe(second.name);
     expect(first.env.CTI_HOME).not.toBe(second.env.CTI_HOME);
     expect(first.cwd).toBe(dir);
-    expect(first.script).toBe(path.join(root, 'dist', 'daemon.mjs'));
+    expect(first.script).toBe(process.execPath);
+    expect(first.args).toEqual([path.join(root, 'dist', 'daemon.mjs')]);
+    expect(first.interpreter).toBe('none');
     expect(first.env.CTI_CODEX_EXECUTABLE).toBeUndefined();
   });
 

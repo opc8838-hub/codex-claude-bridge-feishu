@@ -12,8 +12,8 @@ assert.equal(process.env.GITHUB_ACTIONS, 'true');
 assert.equal(process.env.RUNNER_ENVIRONMENT, 'github-hosted');
 const root = process.cwd();
 const temp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bridge-macos-')));
-const publishedTarball = path.resolve(process.argv[2]);
-assert.ok(fs.existsSync(publishedTarball));
+const publishedTarball = process.argv[2] ? path.resolve(process.argv[2]) : null;
+if (publishedTarball) assert.ok(fs.existsSync(publishedTarball));
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
   !/^(CTI_|ANTHROPIC_|OPENAI_|CODEX_|GROK_|PM2_)/.test(key)));
 const run = (file, args, options = {}) => execFileSync(file, args, {
@@ -45,7 +45,7 @@ async function waitFor(check, label) {
 try {
   for (const [label, tarball] of [
     ['source', path.join(temp, sourcePackage.filename)],
-    ['release-1.3.0', publishedTarball],
+    ...(publishedTarball ? [['published-release', publishedTarball]] : []),
   ]) {
     const prefix = path.join(temp, `${label}-prefix`);
     run('npm', ['install', '--global', '--prefix', prefix, tarball, 'pm2@7.0.4', '--no-audit', '--no-fund']);
@@ -147,7 +147,8 @@ try {
       if (childPid) { try { process.kill(childPid, 'SIGTERM'); } catch { /* exited */ } }
       for (const app of list()) {
         assert.ok(serviceNames.includes(app.name));
-        assert.equal(app.pm2_env.pm_exec_path, path.join(fixture, 'dist/daemon.mjs'));
+        assert.equal(app.pm2_env.pm_exec_path, process.execPath);
+        assert.deepEqual(app.pm2_env.args, [path.join(fixture, 'dist/daemon.mjs')]);
         pm2Command(['delete', app.name]);
       }
       assert.equal(list().length, 0);

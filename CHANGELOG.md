@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.1 — 2026-10-07
+
+- Fix macOS/POSIX PM2 startup when the bridge installation path contains spaces: run Node with a separate daemon-path argument.
+- Add macOS 15 Apple Silicon and Intel CI on Node 20/22, including installed-package CLI checks, foreground signal handling and independent PM2 instances.
+- Add post-release validation of the published tarball and a dedicated macOS installation guide.
+- Correct the installation test to compare canonical paths on macOS (`/var` versus `/private/var`).
+
 ## 1.3.0 — 2026-10-07
 
 - Portable setup and PM2 configuration: no author-specific paths or accounts; each config gets its own process and runtime directory.
