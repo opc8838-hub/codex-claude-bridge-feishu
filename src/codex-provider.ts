@@ -10,6 +10,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execSync } from 'node:child_process';
 import { createRequire as nodeCreateRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { Codex } from '@openai/codex-sdk';
 import type {
   ThreadEvent,
@@ -61,6 +62,55 @@ function resolveWin32CodexExe(): string {
 function sseEvent(type: string, data: unknown): string {
   const payload = typeof data === 'string' ? data : JSON.stringify(data);
   return `data: ${JSON.stringify({ type, data: payload })}\n`;
+}
+
+const CODEX_STREAM_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+const CODEX_TOOL_IDLE_TIMEOUT_MS = 60 * 60 * 1000;
+
+export function isUserVisibleProgress(
+  item: { type: string },
+  hasNewText: boolean,
+): boolean {
+  if (item.type === 'agent_message') return hasNewText;
+  return ['command_execution', 'file_change', 'mcp_tool_call', 'web_search'].includes(item.type);
+}
+
+export function createStreamIdleWatchdog(
+  timeoutMs: number,
+  parentSignal?: AbortSignal,
+): {
+  signal: AbortSignal;
+  reset: (deadlineMs?: number) => void;
+  didTimeout: () => boolean;
+  dispose: () => void;
+} {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
+
+  const abortFromParent = () => controller.abort(parentSignal?.reason);
+  if (parentSignal?.aborted) {
+    abortFromParent();
+  } else {
+    parentSignal?.addEventListener('abort', abortFromParent, { once: true });
+  }
+
+  return {
+    signal: controller.signal,
+    reset(deadlineMs = timeoutMs) {
+      if (controller.signal.aborted) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort(new Error(`Codex stream idle for ${deadlineMs}ms`));
+      }, deadlineMs);
+    },
+    didTimeout: () => timedOut,
+    dispose() {
+      if (timer) clearTimeout(timer);
+      parentSignal?.removeEventListener('abort', abortFromParent);
+    },
+  };
 }
 
 // ── Auth error detection ──
@@ -296,8 +346,13 @@ export class CodexProvider {
         (async () => {
           let lastAgentText = '';
           const seenToolIds = new Set<string>();
+          const runningToolIds = new Set<string>();
           let capturedThreadId: string | null = null;
           let hasReceivedResult = false;
+          const watchdog = createStreamIdleWatchdog(
+            CODEX_STREAM_IDLE_TIMEOUT_MS,
+            params.abortController?.signal,
+          );
 
           try {
             const codexOptions: Record<string, unknown> = {};
@@ -308,6 +363,13 @@ export class CodexProvider {
               codexOptions.codexPathOverride = codexCliPath;
             } else if (process.platform === 'win32' && resolvedCodexExe) {
               codexOptions.codexPathOverride = resolvedCodexExe;
+            }
+            const hiddenLauncher = fileURLToPath(new URL('./codex-hidden.exe', import.meta.url));
+            const realExecutable = codexOptions.codexPathOverride as string | undefined;
+            if (process.platform === 'win32' && realExecutable && fs.existsSync(hiddenLauncher)
+              && path.resolve(realExecutable) !== path.resolve(hiddenLauncher)
+              && !process.env.CODEX_REAL_EXECUTABLE) {
+              codexOptions.codexPathOverride = hiddenLauncher;
             }
 
             if (process.env.OPENAI_API_KEY) {
@@ -323,16 +385,12 @@ export class CodexProvider {
                 LC_ALL: 'C.UTF-8',
                 PYTHONIOENCODING: 'utf-8',
                 PYTHONUTF8: '1',
+                ...(codexOptions.codexPathOverride === hiddenLauncher && realExecutable !== hiddenLauncher
+                  ? { CODEX_REAL_EXECUTABLE: realExecutable } : {}),
               };
             }
 
             const codex = new Codex(codexOptions);
-
-            // MONKEY-PATCH: override executable path on Windows
-            // Prefer global CLI; fall back to bundled binary
-            if (process.platform === 'win32') {
-              (codex as any).exec.executablePath = codexCliPath || resolvedCodexExe;
-            }
 
             // Determine thread options
             const workDir = params.workingDirectory || process.cwd();
@@ -359,8 +417,9 @@ export class CodexProvider {
 
             const prompt = buildPrompt(params.prompt, params.files);
 
+            watchdog.reset();
             const { events } = await thread.runStreamed(prompt, {
-              signal: params.abortController?.signal,
+              signal: watchdog.signal,
             });
 
             for await (const event of events) {
@@ -389,8 +448,15 @@ export class CodexProvider {
                     const delta = msgItem.text.slice(lastAgentText.length);
                     if (delta) {
                       lastAgentText = msgItem.text;
+                      watchdog.reset(runningToolIds.size ? CODEX_TOOL_IDLE_TIMEOUT_MS : CODEX_STREAM_IDLE_TIMEOUT_MS);
                       controller.enqueue(sseEvent('text', delta));
                     }
+                  }
+
+                  if (event.type !== 'item.updated' && isUserVisibleProgress(item, false)) {
+                    if (event.type === 'item.started') runningToolIds.add(item.id);
+                    if (event.type === 'item.completed') runningToolIds.delete(item.id);
+                    watchdog.reset(runningToolIds.size ? CODEX_TOOL_IDLE_TIMEOUT_MS : CODEX_STREAM_IDLE_TIMEOUT_MS);
                   }
 
                   // Command execution (bash tool)
@@ -565,8 +631,9 @@ export class CodexProvider {
 
             controller.close();
           } catch (err) {
-            const message =
-              err instanceof Error ? err.message : String(err);
+            const message = watchdog.didTimeout()
+              ? `Codex response timed out after ${(runningToolIds.size ? CODEX_TOOL_IDLE_TIMEOUT_MS : CODEX_STREAM_IDLE_TIMEOUT_MS) / 60_000} minutes without activity`
+              : err instanceof Error ? err.message : String(err);
             console.error(
               '[codex-provider] Error:',
               err instanceof Error ? err.stack || err.message : err,
@@ -590,6 +657,8 @@ export class CodexProvider {
 
             controller.enqueue(sseEvent('error', message));
             controller.close();
+          } finally {
+            watchdog.dispose();
           }
         })();
       },

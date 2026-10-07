@@ -154,13 +154,19 @@ function createNewBinding(
 
 // ── SDK Session Update Logic ─────────────────────────────────
 
-function computeSdkSessionUpdate(
+export function computeSdkSessionUpdate(
   sdkSessionId: string | null | undefined,
   hasError: boolean,
   errorMessage: string,
 ): string | null {
-  // A timeout, auth failure, or transient provider error does not invalidate the
-  // underlying thread. Keep it so the next message can resume its context.
+  if (hasError && /Codex response timed out.*without activity/i.test(errorMessage)) {
+    return '';
+  }
+  if (hasError && /paginated_threads is not supported yet/i.test(errorMessage)) {
+    return '';
+  }
+  // Other transient provider errors do not invalidate the underlying thread.
+  // Keep it so the next message can resume its context.
   if (sdkSessionId) return sdkSessionId;
   if (hasError && /\b(?:session|thread)\b.*\b(?:not found|does not exist|unknown|invalid|expired)\b/i.test(errorMessage)) {
     return '';

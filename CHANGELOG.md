@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.0 — 2026-10-07
+
+- Portable setup and PM2 configuration: no author-specific paths or accounts; each config gets its own process and runtime directory.
+- One shared config template, explicit `setup codex|claude|grok`, preserved existing configs, environment overrides and provider credential forwarding.
+- Codex SDK pinned to 0.153.4; idle watchdog, stale/incompatible thread recovery, and Windows hidden launcher with child-process cleanup.
+- Distinguish idle models from running tools; abort timed-out streams rather than leaving background work alive.
+- Serialize/coalesce Feishu card updates and retry rate-limited finalization.
+- Include configuration template, Windows build helper and installation guide in distributable packages.
+- Add new-computer installation and runtime regression tests; CI on Windows and Linux.
+
+This GitHub release is separate from the npm registry version. Use the source checkout or the release `.tgz` for 1.3.0.
+
 ## 1.2.1 — 2026-08-19
 
 - README: full product highlights (group chat, per-chat @mention, multi-turn, streaming, session management, multi-agent, cross-session memory)

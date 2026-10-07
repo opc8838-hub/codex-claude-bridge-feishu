@@ -6,7 +6,7 @@
 
 把飞书 / Lark 接到**本机**编程 Agent。群里 @ 一下，Agent 在你电脑上读代码、改文件、跑命令，回复以 CardKit v2 流式卡片回来。
 
-**一个仓库。Grok · Claude Code · Codex 共用同一套命令、卡片和会话。没有自建云中转，Agent 不出你的电脑。**
+**一个仓库。Grok · Claude Code · Codex 共用同一套命令、卡片和会话。桥接进程在本机运行，没有作者自建的云中转；模型请求仍发送到你选择的服务商。**
 
 ---
 
@@ -50,7 +50,7 @@ Agent 每次开聊前会读 `~/.codex-bridge-memory.md`（偏好、项目路径�
 
 ### 还有这些
 
-- **权限审批** — 写文件、跑命令先弹卡：允许一次 / 本会话允许 / 拒绝（点按钮或回 `1` `2` `3`）
+- **权限审批** — Claude / Grok 支持审批卡：允许一次 / 本会话允许 / 拒绝；Codex SDK 的交互审批限制见[安装指南](docs/INSTALL.zh.md)
 - **访问控制** — `/invite` `/remove` `/access`：授权用户、管理员、整群
 - **模式** — `/mode code|plan|ask`
 - **工作区书签** — `/ws save|use|list|remove`
@@ -59,9 +59,9 @@ Agent 每次开聊前会读 `~/.codex-bridge-memory.md`（偏好、项目路径�
 
 ---
 
-## 本地运行，不走云
+## 本机运行，无作者云中转
 
-Agent 在你电脑上跑。项目文件、会话记录、密钥都留在本机，不经过我们自己的云中转。飞书只负责把消息和流式卡片送来送去。
+Agent 进程在你电脑上执行命令和操作文件，会话记录保存在本机。桥接不经过作者的自建服务器；飞书处理聊天和卡片，Agent 会将提示词、所需代码或文件上下文发送到你选择的模型服务商。
 
 - **访问控制** — `/invite` `/remove` `/access`，按用户 / 管理员 / 整群授权
 - **密钥脱敏** — `config.env` 已 gitignore；日志里的 token、Bearer、App Secret 会打码
@@ -110,55 +110,39 @@ AI Agent（本机）  Grok / Claude / Codex
 4. **事件流** — Agent 输出文字增量、工具调用、工具结果、用量信息
 5. **SSE 转换** — Provider 把 Agent 事件收成统一 SSE（`text`、`tool_use`、`tool_result`、`permission_request`、`result`）
 6. **卡片渲染** — `conversation.ts` 聚合 SSE，构建流式 Feishu CardKit 卡片
-7. **实时更新** — 卡片增量经 REST API 推回飞书，群里能看到进度；写文件 / 跑命令会先弹权限卡
+7. **实时更新** — 卡片增量经 REST API 推回飞书，群里能看到进度；审批行为取决于 Agent 和权限配置
 
 ---
 
-## 安装
+## 安装（1.3.0）
 
-```bash
+**新电脑请先看[完整中文安装指南](docs/INSTALL.zh.md)**：包含 Windows、飞书后台配置、后台运行、多实例和旧版迁移。
+
+```text
 git clone https://github.com/opc8838-hub/codex-claude-bridge-feishu.git
 cd codex-claude-bridge-feishu
-npm install
+npm ci
 npm run build
-cp config.env.example config.env
+node bin/cli.js setup codex
 ```
 
-编辑 `config.env`：
+选择 Claude 或 Grok 时，将最后一个参数换成 `claude` 或 `grok`。编辑生成的 `config.env`，填写自己的飞书凭证和工作目录，并登录对应 CLI，然后执行：
 
-```bash
-CTI_AGENT=grok
-CTI_FEISHU_APP_ID=cli_xxxxxxxx
-CTI_FEISHU_APP_SECRET=xxxxxxxx
-CTI_DEFAULT_WORKDIR=/path/to/project
-CTI_FEISHU_REQUIRE_MENTION=true
-CTI_AUTO_APPROVE=false
+```text
+node bin/cli.js run
 ```
 
-```bash
-npm run dev      # 或 npm start
+首次前台测试成功后，按 Ctrl+C 停止，再执行后台启动：
+
+```text
+npm install -g pm2
+node bin/cli.js start
+node bin/cli.js status
 ```
 
-或全局安装：
+每个配置文件的进程和数据目录独立，不再写死作者电脑路径。安装包见 [Releases](https://github.com/opc8838-hub/codex-claude-bridge-feishu/releases)。**npm registry 当前旧版本与 GitHub 发布独立；请使用本仓库源码或 Release 的 1.3.0 安装包。**
 
-```bash
-npm i -g codex-claude-bridge-feishu
-codex-bridge setup && codex-bridge run
-```
-
-同时跑多个 Agent（三个飞书应用、三份配置、三个进程）：
-
-```bash
-CTI_AGENT=grok   CTI_CONFIG_PATH=config.grok.env   CTI_HOME=.bridge-grok   node dist/daemon.mjs
-CTI_AGENT=claude CTI_CONFIG_PATH=config.claude.env CTI_HOME=.bridge-claude node dist/daemon.mjs
-CTI_AGENT=codex  CTI_CONFIG_PATH=config.codex.env  CTI_HOME=.bridge-codex  node dist/daemon.mjs
-```
-
-### 前置
-
-- Node.js >= 20
-- 对应 CLI：`grok --version` / `claude --version` / `codex --version`
-- 每个 Agent 一个飞书企业自建应用：机器人能力、长连接事件、`im.message.receive_v1`、`cardkit:card`、`im:chat*`、`im:resource`
+前置：Node.js 22 推荐（最低 20.19）、对应 Agent CLI 已登录、自己的飞书自建应用。Windows 构建会自动生成隐藏控制台启动器。后台进程仍需电脑开机联网；开机自启要单独配置。
 
 ---
 

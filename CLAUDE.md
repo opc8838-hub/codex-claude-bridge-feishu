@@ -10,9 +10,13 @@ Full architecture and setup: see [README.md](./README.md).
 ## Quick install
 
 ```bash
-npm i -g codex-claude-bridge-feishu
-codex-bridge setup
-codex-bridge run
+git clone https://github.com/opc8838-hub/codex-claude-bridge-feishu.git
+cd codex-claude-bridge-feishu
+npm ci
+npm run build
+node bin/cli.js setup codex
+# Edit config.env and log in to the selected CLI, then:
+node bin/cli.js run
 ```
 
 ## Quick commands
@@ -21,7 +25,7 @@ codex-bridge run
 npm run dev          # Foreground, tsx hot-reload
 npm run build        # esbuild bundle → dist/daemon.mjs
 npm run typecheck    # tsc --noEmit
-npm test             # vitest (36 tests)
+npm test             # vitest regression tests
 npm start            # Run built bundle
 ```
 
@@ -59,8 +63,8 @@ To add a new AI agent: write one file like `codex-provider.ts`, nothing else cha
 
 ## Important gotchas
 
-- **ChatGPT Plus users must NOT set CTI_DEFAULT_MODEL** — Codex auto-select fails otherwise
-- **config.toml leftover model settings** cause "not supported with ChatGPT account" errors
+- **Model availability depends on the account/provider** — leave CTI_DEFAULT_MODEL unset to use the CLI default, or select a supported model.
+- **config.toml leftover model/provider settings** can cause account compatibility errors.
 - **`codexPathOverride`** must be resolved in CodexProvider constructor, not inside ReadableStream start callback (Windows ENOENT otherwise)
 - **daemon.sh is macOS-only** (launchd). Windows/Linux users: pm2 or systemd
 - **`spawn EINVAL` on Windows**: the SDK's `createRequire` chain finds the native `.exe` — pass it as `codexPathOverride`
