@@ -97,6 +97,7 @@ try {
     let foreground;
     let childPid;
     try {
+      pm2Command(['ping']);
       assert.equal(list().length, 0, 'Disposable PM2 daemon must be empty');
       command(['setup', 'codex']);
       command(['setup', 'claude'], 1);
@@ -108,9 +109,8 @@ try {
       const childPidFile = path.join(foregroundHome, 'fixture.pid');
       await waitFor(() => fs.existsSync(childPidFile), 'foreground daemon startup');
       childPid = Number(fs.readFileSync(childPidFile, 'utf8'));
-      const exited = new Promise(resolve => foreground.once('exit', resolve));
       foreground.kill('SIGTERM');
-      await exited;
+      await waitFor(() => foreground.exitCode !== null || foreground.signalCode !== null, 'foreground launcher exit');
       await waitFor(() => {
         try { process.kill(childPid, 0); return false; } catch { return true; }
       }, 'foreground child exit');
