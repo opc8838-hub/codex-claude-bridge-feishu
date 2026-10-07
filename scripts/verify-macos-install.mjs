@@ -4,13 +4,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { execFileSync, spawn } from 'node:child_process';
 
 assert.equal(process.platform, 'darwin');
 assert.equal(process.env.GITHUB_ACTIONS, 'true');
 assert.equal(process.env.RUNNER_ENVIRONMENT, 'github-hosted');
 const root = process.cwd();
-const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'bridge-macos-'));
+const temp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bridge-macos-')));
 const publishedTarball = path.resolve(process.argv[2]);
 assert.ok(fs.existsSync(publishedTarball));
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
@@ -55,6 +56,16 @@ try {
       assert.ok(fs.existsSync(path.join(installed, name)), name);
     }
     run(cli, ['--help'], { env: cliEnv });
+    const packageRequire = createRequire(path.join(installed, 'package.json'));
+    const codexEntry = path.join(path.dirname(packageRequire.resolve('@openai/codex/package.json')), 'bin/codex.js');
+    const claudeSdkEntry = packageRequire.resolve('@anthropic-ai/claude-agent-sdk');
+    const claudeRequire = createRequire(claudeSdkEntry);
+    const claudeEntry = path.join(path.dirname(claudeRequire.resolve(`@anthropic-ai/claude-agent-sdk-darwin-${process.arch}/package.json`)), 'claude');
+    const codexVersion = run(process.execPath, [codexEntry, '--version'], { env: cliEnv }).trim();
+    const claudeVersion = run(claudeEntry, ['--version'], { env: cliEnv }).trim();
+    assert.match(codexVersion, /codex/i);
+    assert.match(claudeVersion, /claude/i);
+    passed(`${label}: bundled Codex and Claude CLI startup (${codexVersion}; ${claudeVersion})`);
     for (const agent of ['codex', 'claude', 'grok']) {
       const work = path.join(temp, `${label} 中文 workspace ${agent}`);
       fs.mkdirSync(work);
